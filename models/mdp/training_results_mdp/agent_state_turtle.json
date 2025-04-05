@@ -1,0 +1,15 @@
+{
+    "config": {
+        "size": [
+            10,
+            10
+        ],
+        "hero_tensor_size": 5,
+        "strategy": "turtle",
+        "percentage_change": 0.25,
+        "initial_epsilon": 1.0,
+        "epsilon_decay": 0.99,
+        "min_epsilon": 0.05
+    },
+    "epsilon": 0.05
+}
