@@ -13,8 +13,8 @@ def simple_critic(map_batch: torch.Tensor, hero_batch: torch.Tensor) -> torch.Te
         reward = float(non_empty_unique_count)
 
         # Add contribution from hero state (e.g., health)
-        health = hero_batch[i, 0].item() # Index 0 assumed to be health
-        reward += health * 0.05 # Small bonus based on health
+        health = hero_batch[i, 0].item()  # Index 0 assumed to be health
+        reward += health * 0.05  # Small bonus based on health
 
         rewards[i] = reward
     return rewards
