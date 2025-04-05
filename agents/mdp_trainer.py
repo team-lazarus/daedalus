@@ -25,9 +25,7 @@ from rich.progress import (
 )
 from rich.text import Text
 
-from daedalus.models.mdp import MDPAgent
-import daedalus.models.mdp.constants as c
-
+from daedalus.models.mdp import MDPAgent, Entry
 
 # --- Setup Logging ---
 # Use RichHandler for pretty console logging
@@ -96,7 +94,7 @@ class MDPTrainer:
         value_lists.append([float(b) for b in self.hero_param_ranges['item1']])  # e.g., [False, True] -> [0.0, 1.0]
         value_lists.append([float(b) for b in self.hero_param_ranges['item2']])  # e.g., [False, True] -> [0.0, 1.0]
         # Map Enum entries to integer indices 0-3
-        entry_map = {entry: i for i, entry in enumerate(c.Entry)}
+        entry_map = {entry: i for i, entry in enumerate(Entry)}
         value_lists.append([float(entry_map[e]) for e in self.hero_param_ranges['entry']]) # e.g., [Entry.TOP,...] -> [0.0, 1.0, 2.0, 3.0]
         value_lists.append(list(self.hero_param_ranges['rooms_left'])) # e.g., range(0, 7)
 
@@ -170,7 +168,7 @@ class MDPTrainer:
         # Or use: indices_to_show = random.sample(range(num_maps), num_to_show)
 
         param_names = ['H', 'I1', 'I2', 'Entry', 'RLeft'] # Short names
-        entry_reverse_map = {i: entry.name for i, entry in enumerate(c.Entry)} # Map index back to name
+        entry_reverse_map = {i: entry.name for i, entry in enumerate(Entry)} # Map index back to name
 
         for i in indices_to_show:
             map_tensor = final_maps[i]
@@ -201,6 +199,9 @@ class MDPTrainer:
                 console.print(row_text)
 
 
+    # Fix for MDPTrainer.train() method
+    # Replace the problematic section in the train method
+
     def train(self):
         """Runs the main training loop using Rich progress."""
         log.info(f"Starting training for {self.num_episodes} episodes.")
@@ -211,8 +212,8 @@ class MDPTrainer:
         # Generate hero batch once
         initial_hero_batch, hero_combinations = self._generate_initial_hero_batch()
         if self.batch_size_N == 0:
-             log.error("Generated hero batch size is 0. Cannot train.")
-             return
+            log.error("Generated hero batch size is 0. Cannot train.")
+            return
 
         # Create initial map batch (all zeros or customize if needed)
         initial_maps = torch.zeros((self.batch_size_N, self.map_size[0], self.map_size[1]), dtype=torch.long)
@@ -249,8 +250,12 @@ class MDPTrainer:
                     initial_hero_batch.clone(), # Pass the full hero batch
                     self.max_steps_per_episode
                 )
+
+                
+                # FIX: Check if 'final_maps' exists in episode_result and handle properly
                 last_maps_result = episode_result['final_maps'] # Keep track of the last map results
-                episode_metrics = episode_result['metrics'] # Get metrics dict
+                    
+                episode_metrics = episode_result.get('metrics', {}) # Get metrics dict, default to empty if not present
 
                 # Add episode-specific info to metrics
                 full_metrics = {
@@ -264,12 +269,23 @@ class MDPTrainer:
                 metrics_str_parts = [
                     f"Ep: {episode_idx+1}/{self.num_episodes}",
                     f"ε: {full_metrics['final_epsilon']:.3f}",
-                    f"AvgR: {full_metrics['avg_reward']:.2f}",
-                    f"CumR: {full_metrics['cumulative_reward']:.1f}",
-                    # Use np.isnan to check for NaN safely
-                    f"Steps: {full_metrics['avg_steps_to_threshold']:.1f}" if not np.isnan(full_metrics['avg_steps_to_threshold']) else "Steps: N/A",
-                    f"Done: {full_metrics['n_finished']}/{full_metrics['n_total']}"
                 ]
+                
+                # Add optional metrics if they exist
+                if 'avg_reward' in full_metrics:
+                    metrics_str_parts.append(f"AvgR: {full_metrics['avg_reward']:.2f}")
+                if 'cumulative_reward' in full_metrics:
+                    metrics_str_parts.append(f"CumR: {full_metrics['cumulative_reward']:.1f}")
+                
+                # Use np.isnan to check for NaN safely if the metric exists
+                if 'avg_steps_to_threshold' in full_metrics and not np.isnan(full_metrics['avg_steps_to_threshold']):
+                    metrics_str_parts.append(f"Steps: {full_metrics['avg_steps_to_threshold']:.1f}")
+                else:
+                    metrics_str_parts.append("Steps: N/A")
+                    
+                if 'n_finished' in full_metrics and 'n_total' in full_metrics:
+                    metrics_str_parts.append(f"Done: {full_metrics['n_finished']}/{full_metrics['n_total']}")
+                    
                 metrics_display = " | ".join(metrics_str_parts)
 
                 # Update Rich progress bar
@@ -279,14 +295,15 @@ class MDPTrainer:
                 if (episode_idx + 1) % self.metric_update_steps == 0 or (episode_idx + 1) == self.num_episodes:
                     self._save_metrics()
 
+                # Visualize results from the last episode
+                if last_maps_result is not None:
+                    try:
+                        self.visualize_maps(last_maps_result, hero_combinations)
+                    except Exception as e:
+                        console.print_exception(show_locals=True)
+                        log.error(f"Error visualizing maps: {e}")
+                else:
+                    log.warning("No maps generated in the last episode to visualize.")
 
-        log.info("Training finished.")
-
-        # Save final agent state
         self.agent.save_state(self.agent_save_path)
-
-        # Visualize results from the last episode
-        if last_maps_result is not None:
-            self.visualize_maps(last_maps_result, hero_combinations)
-        else:
-            log.warning("No maps generated in the last episode to visualize.")
+        log.info("Training finished.")

@@ -32,9 +32,9 @@ if __name__ == "__main__":
         critic=level_critic,
         strategy=h.AGENT_STRATEGY,
         percentage_change=h.PERCENTAGE_MOD_LIMIT,
-        initial_epsilon=1.0,
-        epsilon_decay=0.9995,  # Decay slightly faster
-        min_epsilon=0.001,
+        initial_epsilon=h.INITIAL_EPSILON,
+        epsilon_decay=h.EPSILON_DECAY,  # Decay slightly faster
+        min_epsilon=h.MIN_EPSILON,
     )
 
     # --- Optional: Load Agent State ---
