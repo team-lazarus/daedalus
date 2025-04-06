@@ -1,0 +1,17 @@
+{
+    "config": {
+        "size": [
+            10,
+            10
+        ],
+        "hero_tensor_size": 5,
+        "strategy": "narrow",
+        "percentage_change": 0.3,
+        "initial_epsilon": 1,
+        "epsilon_decay": 0.9995,
+        "min_epsilon": 0,
+        "wide_greedy_sample_k": 64,
+        "num_total_actions": 7
+    },
+    "epsilon": 0.6773295074142136
+}

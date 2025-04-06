@@ -6,10 +6,15 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "black>=25.1.0",
+    "gym>=0.26.2",
+    "joblib>=1.4.2",
     "lightning>=2.5.1",
+    "mpi4py>=4.0.3",
     "pandas>=2.2.3",
     "pytest>=8.3.5",
     "rich>=14.0.0",
+    "scipy>=1.15.2",
+    "tensorflow>=2.19.0",
     "torch>=2.6.0",
     "torchvision>=0.21.0",
 ]
