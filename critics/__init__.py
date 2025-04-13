@@ -1,1 +1,1 @@
-from .level_critic import level_critic
+from .level_criticv3 import level_critic

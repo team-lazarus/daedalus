@@ -1,0 +1,47 @@
+# --- PPO Episodic Training Configuration ---
+
+# Environment & Model Mode
+mode: turtle             # "narrow", "turtle", or "wide"
+map_size: [12, 12]       # Map dimensions (height, width)
+hero_tensor_size: 5      # Size of the hero state vector
+
+# General Setup
+seed: 42                 # Random seed for reproducibility
+device: cpu             # "cuda" or "cpu"
+
+# Training Loop Control
+num_episodes: 1000       # Total number of episodes to run
+episode_length: 256      # Maximum number of steps per episode
+
+# PPO Core Parameters
+num_envs: 256            # Number of parallel environments/maps to simulate
+n_steps_per_rollout: 50  # << IMPORTANT: Steps collected per env before a PPO update (controls update frequency)
+num_epochs_per_update: 4 # Number of optimization epochs over the collected data batch
+minibatch_size: 256      # Size of minibatches during PPO update (Should be <= num_envs * n_steps_per_rollout)
+                         # Example: 128 envs * 64 steps = 8192 transitions per update.
+                         # Minibatch size of 256 means 8192/256 = 32 minibatches per epoch.
+
+# PPO Algorithm Hyperparameters
+learning_rate: 0.0003    # Learning rate for Adam optimizer
+gamma: 0.99              # Discount factor for future rewards
+gae_lambda: 0.95         # Lambda factor for Generalized Advantage Estimation (GAE)
+clip_epsilon: 0.2        # Clipping parameter for PPO policy loss
+vf_coef: 0.5             # Coefficient for the value function loss in the total loss
+entropy_coef: 0.01       # Coefficient for the entropy bonus (encourages exploration)
+max_grad_norm: 0.5       # Maximum norm for gradient clipping
+
+# Action Space & Exploration
+temperature: 0.2         # Temperature for sampling actions (higher = more random; 0 = deterministic argmax)
+
+# Logging & Saving
+save_checkpoint_freq: 100 # Save a checkpoint every N episodes
+print_maps_freq: 1       # Print example initial/final maps every N episodes
+checkpoint_dir: ppo_checkpoints_episodic_metrics # Directory to save checkpoints
+run_name: null           # Optional custom name for the run sub-directory (if null/None, uses default naming)
+                         # Example: my_run_1
+
+# Environment Initialization Details (for initialize_map_hero)
+initial_map_walk_steps: 36 # Number of random walk steps to generate initial map structure
+initial_map_empty_prob: 0.75 # Probability of placing an empty tile (value 1) during the walk
+
+# --- End of Configuration ---

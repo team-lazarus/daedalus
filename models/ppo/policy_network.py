@@ -13,11 +13,13 @@ class PolicyNetworkEncoder(nn.Module):
         channels: List[int] = [1, 4, 16, 64, 256],
         input_size: Tuple[int] = (12, 12),
         output_size: int = 1024,
+        hero_tensor_size: int = 6
     ):
         super().__init__()
         self.input_size = self.input_size_x, self.input_size_y = input_size
         self.cnn_output = ((self.input_size_x * self.input_size_y) // 36)*channels[4]
         self.output_size = output_size
+        self.hero_tensor_size = hero_tensor_size
 
         self.conv1 = nn.Conv2d(channels[0], channels[1], 3, padding="same")
         self.conv2 = nn.Conv2d(channels[1], channels[2], 3, padding="same")
@@ -27,9 +29,9 @@ class PolicyNetworkEncoder(nn.Module):
         self.down1 = nn.Conv2d(channels[2], channels[2], 3, 2)
         self.down2 = nn.Conv2d(channels[4], channels[4], 3, 2)
 
-        self.linear = nn.Linear(self.cnn_output, self.output_size, bias=True)
+        self.linear = nn.Linear(self.cnn_output + self.hero_tensor_size, self.output_size, bias=True)
 
-    def forward(self, x):
+    def forward(self, x, hero_tensor):
         x = F.relu(self.conv1(x))
         x = F.relu(self.conv2(x))
         x = F.relu(self.down1(x))
@@ -39,6 +41,7 @@ class PolicyNetworkEncoder(nn.Module):
         x = F.relu(self.down2(x))
 
         x = torch.flatten(x, start_dim=1)
+        x = torch.cat([x, hero_tensor], dim = 1)
         x = F.relu(self.linear(x))
         return x
 
@@ -76,12 +79,14 @@ class PPOPolicyNetwork(nn.Module):
         encoder_output_size: int = 1024,
         decoder_hidden_sizes: List[int] = [512, 256],
         output_size: int = 7,  # 12x12 flattened output
+        hero_tensor_size: int = 6
     ):
         super().__init__()
         self.encoder = PolicyNetworkEncoder(
             channels=channels,
             input_size=input_size,
-            output_size=encoder_output_size
+            output_size=encoder_output_size,
+            hero_tensor_size=hero_tensor_size
         )
         
         self.decoder = PolicyNetworkDecoder(
@@ -90,8 +95,8 @@ class PPOPolicyNetwork(nn.Module):
             output_size=output_size
         )
     
-    def forward(self, x):
-        x = self.encoder(x)
+    def forward(self, x, hero_tensor):
+        x = self.encoder(x, hero_tensor)
         x = self.decoder(x)
         return x
 
@@ -108,7 +113,8 @@ if __name__ == "__main__":
     # Test encoder
     encoder = PolicyNetworkEncoder()
     in_tensor = torch.rand((16, 1, 12, 12))
-    out_tensor = encoder(in_tensor)
+    hero_tensor = torch.rand(16,6)
+    out_tensor = encoder(in_tensor, hero_tensor)
     table.add_row("Encoder", str(in_tensor.shape), str(out_tensor.shape))
     
     # Test decoder
@@ -118,7 +124,7 @@ if __name__ == "__main__":
     
     # Test full policy network
     policy_net = PPOPolicyNetwork()
-    policy_out = policy_net(in_tensor)
+    policy_out = policy_net(in_tensor, hero_tensor)
     table.add_row("Full Policy Network", str(in_tensor.shape), str(policy_out.shape))
     
     # Print the table
