@@ -3,7 +3,7 @@
 import torch
 import numpy as np
 import random
-from level_critic_modifiedv3 import *
+from critics.level_criticv3 import *
 
 MAP_HEIGHT = 12
 MAP_WIDTH = 12
