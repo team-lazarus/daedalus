@@ -1,4 +1,13 @@
 # --- Imports ---
+#TODO: Parth, add NN encoder
+#TODO: Parth, ensure metrics for each episode are saved
+#TODO: Parth, add stable baseline
+#TODO: Parth, add arg parse (without stable baseline, with stable baseline, dqn [if possible])
+#TODO: Parth, validation
+
+#TODO: Parth, there are three representation (narrow, wide, turtle)
+#TODO: Parth, add batches
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
