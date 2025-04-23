@@ -9,3 +9,5 @@ wheels/
 # Virtual environments
 .venv
 critics/*checkpoints/
+agents/ppo_checkpoints_episodic_metrics/
+ppo_checkpoints_episodic_metrics/
