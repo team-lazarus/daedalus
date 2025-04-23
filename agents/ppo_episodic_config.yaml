@@ -15,7 +15,7 @@ episode_length: 256      # Maximum number of steps per episode
 
 # PPO Core Parameters
 num_envs: 256            # Number of parallel environments/maps to simulate
-n_steps_per_rollout: 256  # << IMPORTANT: Steps collected per env before a PPO update (controls update frequency)
+n_steps_per_rollout: 1024  # << IMPORTANT: Steps collected per env before a PPO update (controls update frequency)
 num_epochs_per_update: 4 # Number of optimization epochs over the collected data batch
 minibatch_size: 65536      # Size of minibatches during PPO update (Should be <= num_envs * n_steps_per_rollout)
                          # Example: 128 envs * 64 steps = 8192 transitions per update.
