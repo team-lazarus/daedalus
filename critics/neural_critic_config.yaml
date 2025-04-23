@@ -1,0 +1,51 @@
+# neural_critic_config.yaml
+# Configuration for training the Neural Critic Approximator
+
+# --- General Settings ---
+map_size: [12, 12]         # Dimensions of the map (height, width)
+seed: 42                   # Random seed for reproducibility
+device: "cpu"             # "cuda" or "cpu" - attempts cuda if available, falls back to cpu in script
+
+# --- Model Selection & Hyperparameters ---
+use_mlp_critic: true       # Set to true to use MLP, false for CNN
+
+# Training Loop Control
+num_epochs: 50             # Total training epochs
+steps_per_epoch: 1000      # Batches per epoch
+batch_size: 1024            # Maps per training batch
+learning_rate: 0.0001      # Optimizer learning rate (Adam)
+
+# -- CNN Specific Parameters (only used if use_mlp_critic is false) --
+cnn_channels: [1, 16, 32, 64] # Channels in CNN layers [input, conv1, conv2, conv3]
+cnn_fc_hidden_size: 128       # Size of the fully connected layer after CNN features
+
+# -- MLP Specific Parameters (only used if use_mlp_critic is true) --
+mlp_hidden_sizes: [256, 128]  # Sizes of hidden layers in the MLP
+mlp_dropout_prob: 0.3         # Dropout probability in MLP layers
+
+# --- Data Generation ---
+map_gen_min_steps: 0          # Minimum random walk steps for map generation
+map_gen_max_steps: 256        # Maximum random walk steps
+tile_empty_prob: 0.90         # Probability of placing an empty tile (value 1)
+tile_door_prob: 0.05          # Probability of placing a door tile (value 6)
+# tile_enemy_prob is calculated automatically (1.0 - empty - door)
+
+# Tile Definitions (Ensure these match what your 'actual_critic' expects)
+tile_empty_value: 1
+tile_door_value: 6
+tile_enemy_values: [3, 4, 5]  # List of possible enemy tile values
+
+# Hero Tensor Size (Required for dummy tensor generation for the actual_critic)
+hero_tensor_size: 5           # Size of the hero vector expected by your critic
+
+# --- Validation ---
+validation_freq: 500          # Run validation every N training steps
+validation_batches: 50        # Number of batches to use for validation MSE calculation
+print_validation_maps: true   # Print example maps during validation?
+num_validation_maps_to_print: 5 # How many random maps to print if enabled
+
+# --- Logging & Saving ---
+save_checkpoint_freq_epochs: 5 # Save a checkpoint every N epochs
+checkpoint_dir: "neural_critic_checkpoints" # Base directory for saving checkpoints/logs
+log_filename: "training_metrics.csv"      # Name of the CSV log file within the run directory
+# run_name: "my_critic_run_01" # Optional: Specify a run name, otherwise one is generated

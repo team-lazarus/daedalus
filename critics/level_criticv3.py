@@ -1,16 +1,16 @@
 # --- START OF FILE level_critic_modified_12x12.py ---
 
 """
-Level critic module for evaluating procedurally generated 12x12 game levels 
+Level critic module for evaluating procedurally generated 12x12 game levels
 for a 2D roguelike.
 
-Evaluates based on connectivity, door placement, enemy presence and placement, 
-edge constraints (edges must be Wall or Door), and structural features 
+Evaluates based on connectivity, door placement, enemy presence and placement,
+edge constraints (edges must be Wall or Door), and structural features
 like internal walls.
 
 Tile Definitions:
 - 0: Wall
-- 1: Empty traversable space 
+- 1: Empty traversable space
 - 2-5: Empty traversable space containing an Enemy (Types 2, 3, 4, 5)
 - 6: Door (traversable)
 
