@@ -1,14 +1,10 @@
-# train_neural_critic.py
-
-# --- Standard Library Imports ---
 import csv
 import os
 import random
 import time
 from dataclasses import dataclass, field, fields
-from typing import Any, Callable, Dict, Generator, List, Optional, Tuple, Union
+from typing import Callable, List, Optional, Tuple
 
-# --- Third-Party Imports ---
 import numpy as np
 import torch
 import torch.nn as nn
@@ -27,56 +23,21 @@ from rich.progress import (
     TimeRemainingColumn,
 )
 from rich.table import Table
-from rich.text import Text  # Import Text for score formatting
-from tqdm import tqdm
+from rich.text import Text
 
-# --- Local Application/Library Specific Imports ---
-# Mock Critic Function (IMPORTANT: Replace with your actual import)
-from daedalus.critics import level_critic  # <<< Your actual critic function
+from daedalus.critics import level_critic as actual_critic
 
-
-actual_critic = level_critic # <<< Use this line when you have the real critic
-
-
-# --- Model Definitions (Unchanged) ---
-class CriticApproximatorCNN(nn.Module):
-    """CNN Critic Approximator"""
-
-    def __init__(
-        self,
-        channels: List[int] = [1, 16, 32, 64],
-        input_size: Tuple[int, int] = (12, 12),
-        hidden_fc_size: int = 128,
-        output_size: int = 1,
-    ):
-        super().__init__()
-        self.input_size = self.input_size_x, self.input_size_y = input_size
-        self.conv1 = nn.Conv2d(channels[0], channels[1], kernel_size=3, padding="same")
-        self.bn1 = nn.BatchNorm2d(channels[1])
-        self.conv2 = nn.Conv2d(channels[1], channels[2], kernel_size=3, padding="same")
-        self.bn2 = nn.BatchNorm2d(channels[2])
-        self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)
-        self.conv3 = nn.Conv2d(channels[2], channels[3], kernel_size=3, padding="same")
-        self.bn3 = nn.BatchNorm2d(channels[3])
-        self.pool2 = nn.MaxPool2d(kernel_size=2, stride=2)
-        self.flattened_size = channels[-1] * (input_size[0] // 4) * (input_size[1] // 4)
-        self.fc1 = nn.Linear(self.flattened_size, hidden_fc_size)
-        self.fc_out = nn.Linear(hidden_fc_size, output_size)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = F.relu(self.bn1(self.conv1(x)))
-        x = F.relu(self.bn2(self.conv2(x)))
-        x = self.pool1(x)
-        x = F.relu(self.bn3(self.conv3(x)))
-        x = self.pool2(x)
-        x = torch.flatten(x, start_dim=1)
-        x = F.relu(self.fc1(x))
-        x = self.fc_out(x)
-        return x
+INITIAL_CHECKPOINT_PATH = (
+    "neural_critic_checkpoints/critic_MLP_20250422_113333/latest_checkpoint.pth"
+)
 
 
 class CriticApproximatorMLP(nn.Module):
-    """MLP Critic Approximator"""
+    """
+    MLP Critic Approximator.
+
+    Predicts a score for a given map layout represented as a flattened tensor.
+    """
 
     def __init__(
         self,
@@ -85,6 +46,15 @@ class CriticApproximatorMLP(nn.Module):
         output_size: int = 1,
         dropout_prob: float = 0.3,
     ):
+        """
+        Initializes the MLP layers.
+
+        Args:
+            input_size: The size of the flattened input map tensor.
+            hidden_sizes: A list of integers defining the size of each hidden layer.
+            output_size: The size of the output layer (typically 1 for a score).
+            dropout_prob: The dropout probability to apply after activation functions.
+        """
         super().__init__()
         self.input_size = input_size
         layers = []
@@ -99,6 +69,18 @@ class CriticApproximatorMLP(nn.Module):
         self.network = nn.Sequential(*layers)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Performs the forward pass through the network.
+
+        Args:
+            x: The input tensor of shape (N, 1, H, W).
+
+        Returns:
+            The output tensor representing the predicted score(s).
+
+        Raises:
+            ValueError: If the input tensor shape or flattened size is incorrect.
+        """
         if x.dim() != 4 or x.shape[1] != 1:
             raise ValueError(f"Expected input shape (N, 1, H, W), got {x.shape}")
         x = torch.flatten(x, start_dim=1)
@@ -111,21 +93,17 @@ class CriticApproximatorMLP(nn.Module):
         return x
 
 
-# --- Configuration ---
 @dataclass
 class CriticConfig:
-    """Configuration class for Neural Critic training."""
+    """Configuration class for Neural Critic training using MLP."""
 
     map_size: Tuple[int, int] = (12, 12)
     seed: int = 42
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
-    use_mlp_critic: bool = True
     num_epochs: int = 50
     steps_per_epoch: int = 1000
     batch_size: int = 128
     learning_rate: float = 1e-4
-    cnn_channels: List[int] = field(default_factory=lambda: [1, 16, 32, 64])
-    cnn_fc_hidden_size: int = 128
     mlp_hidden_sizes: List[int] = field(default_factory=lambda: [256, 128])
     mlp_dropout_prob: float = 0.3
     map_gen_min_steps: int = 0
@@ -142,7 +120,6 @@ class CriticConfig:
     run_name: Optional[str] = None
     log_filename: str = "training_metrics.csv"
     hero_tensor_size: int = 5
-    # <<< New Config: Control validation map printing >>>
     print_validation_maps: bool = True
     num_validation_maps_to_print: int = 5
 
@@ -153,29 +130,34 @@ class CriticConfig:
         self.tile_enemy_prob = max(
             0.0, 1.0 - self.tile_empty_prob - self.tile_door_prob
         )
-        if not self.tile_enemy_values:
-            if self.tile_enemy_prob > 0:
-                print(
-                    "Warning: Non-zero enemy probability but no enemy "
-                    "tile values specified."
-                )
+        if not self.tile_enemy_values and self.tile_enemy_prob > 0:
+            print(
+                "Warning: Non-zero enemy probability but no enemy "
+                "tile values specified."
+            )
             self.tile_enemy_prob = 0
-        model_type = "MLP" if self.use_mlp_critic else "CNN"
+
         if self.run_name is None:
-            self.run_name = f"critic_{model_type}_{time.strftime('%Y%m%d_%H%M%S')}"
+            self.run_name = f"critic_MLP_{time.strftime('%Y%m%d_%H%M%S')}"
         self.checkpoint_dir = os.path.join(self.checkpoint_dir, self.run_name)
 
 
 def configure_critic_from_yaml(yaml_path: str) -> CriticConfig:
-    """Loads configuration from a YAML file, filtering unknown keys."""
+    """
+    Loads MLP critic configuration from a YAML file, filtering unknown keys.
+
+    Args:
+        yaml_path: Path to the YAML configuration file.
+
+    Returns:
+        A CriticConfig instance.
+    """
     try:
         with open(yaml_path, "r") as f:
             yaml_config = yaml.safe_load(f)
         valid_keys = {f.name for f in fields(CriticConfig) if f.init}
         filtered_config = {k: v for k, v in yaml_config.items() if k in valid_keys}
-        if "use_mlp_critic" in filtered_config:
-            filtered_config["use_mlp_critic"] = bool(filtered_config["use_mlp_critic"])
-        # Handle new boolean config from YAML
+
         if "print_validation_maps" in filtered_config:
             filtered_config["print_validation_maps"] = bool(
                 filtered_config["print_validation_maps"]
@@ -192,15 +174,25 @@ def configure_critic_from_yaml(yaml_path: str) -> CriticConfig:
         return CriticConfig()
 
 
-# --- Data Generation (Unchanged) ---
 def generate_random_map(config: CriticConfig) -> torch.Tensor:
+    """
+    Generates a random map tensor based on the configuration settings.
+
+    Args:
+        config: The CriticConfig instance containing map generation parameters.
+
+    Returns:
+        A map tensor of shape specified in config.map_size.
+    """
     map_tensor = torch.zeros(config.map_size, dtype=torch.int64)
     size_x, size_y = config.map_size
     if size_x <= 0 or size_y <= 0:
         return map_tensor
+
     start_pos = (random.randint(0, size_x - 1), random.randint(0, size_y - 1))
     current_pos = start_pos
     num_steps = random.randint(config.map_gen_min_steps, config.map_gen_max_steps)
+
     for _ in range(num_steps):
         rand_val = random.random()
         if rand_val < config.tile_empty_prob:
@@ -211,13 +203,16 @@ def generate_random_map(config: CriticConfig) -> torch.Tensor:
             tile_value = random.choice(config.tile_enemy_values)
         else:
             tile_value = config.tile_empty_value
+
         map_tensor[current_pos] = tile_value
+
         dx, dy = random.choice(
             [(0, 1), (0, -1), (1, 0), (-1, 0), (1, 1), (1, -1), (-1, 1), (-1, -1)]
         )
         next_x = max(0, min(size_x - 1, current_pos[0] + dx))
         next_y = max(0, min(size_y - 1, current_pos[1] + dy))
         current_pos = (next_x, next_y)
+
     return map_tensor
 
 
@@ -227,36 +222,52 @@ def generate_batch(
     critic_func: Callable,
     device: torch.device,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    """Generates maps and their 'true' scores from the original critic."""
-    maps_batch_cpu = torch.stack(
-        [generate_random_map(config) for _ in range(batch_size)]
-    )
+    """
+    Generates a batch of maps and their 'true' scores from the original critic.
+
+    Args:
+        batch_size: The number of maps to generate in the batch.
+        config: The CriticConfig instance.
+        critic_func: The original critic function to score the maps.
+        device: The torch device to place the output tensors on.
+
+    Returns:
+        A tuple containing:
+        - maps_batch_nn: Tensor of maps ready for the neural network (N, 1, H, W).
+        - true_scores: Tensor of corresponding scores from critic_func (N, 1).
+    """
+    maps_list = [generate_random_map(config) for _ in range(batch_size)]
+    maps_batch_cpu = torch.stack(maps_list)
+
     dummy_hero_batch = torch.zeros(
         (batch_size, config.hero_tensor_size),
         dtype=torch.int64,
         device=device,
     )
     true_scores = critic_func(maps_batch_cpu.to(device), dummy_hero_batch)
+
     maps_batch_nn = maps_batch_cpu.unsqueeze(1).float().to(device)
     true_scores = true_scores.float().to(device).unsqueeze(-1)
     return maps_batch_nn, true_scores
 
 
-# --- Trainer Class ---
 class NeuralCriticTrainer:
-    """Orchestrates the training of the neural critic approximator."""
+    """Orchestrates the training of the MLP neural critic approximator."""
 
     def __init__(self, config: CriticConfig, critic_func: Callable):
+        """
+        Initializes the trainer, model, optimizer, and logging.
+
+        Args:
+            config: The CriticConfig instance.
+            critic_func: The original critic function used for generating target scores.
+        """
         self.config = config
         self.critic_func = critic_func
         self.device = torch.device(config.device)
         self.console = Console()
 
-        random.seed(config.seed)
-        np.random.seed(config.seed)
-        torch.manual_seed(config.seed)
-        if self.device.type == "cuda":
-            torch.cuda.manual_seed(config.seed)
+        self._set_seeds(config.seed)
 
         os.makedirs(config.checkpoint_dir, exist_ok=True)
         self.log_filepath = os.path.join(config.checkpoint_dir, config.log_filename)
@@ -269,41 +280,36 @@ class NeuralCriticTrainer:
         ]
         self._init_log_file()
 
-        self.model_type = "MLP" if config.use_mlp_critic else "CNN"
+        self.console.print("Initializing [bold blue]MLP[/] critic model...")
+        map_h, map_w = config.map_size
+        self.model = CriticApproximatorMLP(
+            input_size=map_h * map_w,
+            hidden_sizes=config.mlp_hidden_sizes,
+            output_size=1,
+            dropout_prob=config.mlp_dropout_prob,
+        ).to(self.device)
         self.console.print(
-            f"Initializing [bold blue]{self.model_type}[/] critic model..."
+            f"  MLP Hidden Sizes: {config.mlp_hidden_sizes}, "
+            f"Dropout: {config.mlp_dropout_prob}"
         )
-        if config.use_mlp_critic:
-            map_h, map_w = config.map_size
-            self.model = CriticApproximatorMLP(
-                input_size=map_h * map_w,
-                hidden_sizes=config.mlp_hidden_sizes,
-                output_size=1,
-                dropout_prob=config.mlp_dropout_prob,
-            ).to(self.device)
-            self.console.print(
-                f"  MLP Hidden Sizes: {config.mlp_hidden_sizes}, "
-                f"Dropout: {config.mlp_dropout_prob}"
-            )
-        else:
-            self.model = CriticApproximatorCNN(
-                channels=config.cnn_channels,
-                input_size=config.map_size,
-                hidden_fc_size=config.cnn_fc_hidden_size,
-            ).to(self.device)
-            self.console.print(
-                f"  CNN Channels: {config.cnn_channels}, "
-                f"FC Hidden: {config.cnn_fc_hidden_size}"
-            )
+
+        self._load_initial_checkpoint(INITIAL_CHECKPOINT_PATH)
 
         self.optimizer = optim.Adam(self.model.parameters(), lr=config.learning_rate)
         self.criterion = nn.MSELoss()
         self.start_epoch = 0
         self.total_steps_trained = 0
 
+    def _set_seeds(self, seed: int):
+        """Sets random seeds for reproducibility."""
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        if self.device.type == "cuda":
+            torch.cuda.manual_seed(seed)
+
     def _init_log_file(self):
         """Creates the log file and writes the header if it doesn't exist."""
-        # (Unchanged)
         if not os.path.exists(self.log_filepath):
             try:
                 with open(self.log_filepath, "w", newline="") as csvfile:
@@ -315,11 +321,38 @@ class NeuralCriticTrainer:
                     f"{self.log_filepath}: {e}"
                 )
 
+    def _load_initial_checkpoint(self, path: str):
+        """Loads initial model weights from a specified checkpoint path."""
+        if os.path.exists(path):
+            try:
+                # Load checkpoint allowing arbitrary objects (like CriticConfig)
+                # Only do this if the checkpoint source is trusted.
+                checkpoint = torch.load(path, map_location=self.device, weights_only=False)
+                if "model_state_dict" in checkpoint:
+                    # Ensure model state matches before loading
+                    self.model.load_state_dict(checkpoint["model_state_dict"])
+                    self.console.print(
+                        f"Loaded initial model weights from [green]{path}[/green]."
+                    )
+                else:
+                    self.console.print(
+                        f"[yellow]Warning:[/yellow] Checkpoint at {path} exists but lacks 'model_state_dict'. Using randomly initialized weights."
+                    )
+            except Exception as e:
+                self.console.print(
+                    f"[red]Error loading initial checkpoint from {path}: {e}. "
+                    "Starting with randomly initialized weights.[/red]"
+                )
+        else:
+            self.console.print(
+                f"Initial checkpoint [yellow]{path}[/yellow] not found. "
+                "Starting with randomly initialized weights."
+            )
+
     def _log_metrics(
         self, step: int, epoch: int, train_mse: float, validation_mse: float
     ):
         """Appends a row of metrics to the CSV log file."""
-        # (Unchanged)
         timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
         log_data = [
             step,
@@ -339,8 +372,7 @@ class NeuralCriticTrainer:
             )
 
     def _save_checkpoint(self, epoch: int, is_latest: bool = False):
-        """Saves model and optimizer state."""
-        # (Unchanged)
+        """Saves model and optimizer state to the run's checkpoint directory."""
         filename = (
             "latest_checkpoint.pth"
             if is_latest
@@ -361,71 +393,66 @@ class NeuralCriticTrainer:
         except Exception as e:
             self.console.print(f"[red]Error saving checkpoint to {path}: {e}[/red]")
             if os.path.exists(temp_path):
-                os.remove(temp_path)
+                try:
+                    os.remove(temp_path)
+                except OSError:
+                    pass
 
     def _load_checkpoint(self):
-        """Loads the latest checkpoint if available."""
-        # (Unchanged)
+        """Loads the latest checkpoint from the run's directory to resume training."""
         latest_checkpoint_path = os.path.join(
             self.config.checkpoint_dir, "latest_checkpoint.pth"
         )
         if os.path.exists(latest_checkpoint_path):
             try:
+                # Load checkpoint allowing arbitrary objects for resuming
                 checkpoint = torch.load(
-                    latest_checkpoint_path, map_location=self.device
+                    latest_checkpoint_path, map_location=self.device, weights_only=False
                 )
-                chk_config = checkpoint.get("config")
-                if (
-                    chk_config
-                    and hasattr(chk_config, "use_mlp_critic")
-                    and chk_config.use_mlp_critic != self.config.use_mlp_critic
-                ):
-                    raise ValueError(
-                        "Model type mismatch between loaded checkpoint and current config."
-                    )
                 self.model.load_state_dict(checkpoint["model_state_dict"])
                 self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
                 self.start_epoch = checkpoint.get("epoch", -1) + 1
                 self.total_steps_trained = checkpoint.get("total_steps_trained", 0)
                 self.console.print(
-                    f"Checkpoint loaded from [green]{latest_checkpoint_path}[/green]. Resuming from epoch {self.start_epoch}."
+                    f"Resuming training. Checkpoint loaded from [green]{latest_checkpoint_path}[/green]. Resuming from epoch {self.start_epoch}."
                 )
             except Exception as e:
                 self.console.print(
-                    f"[red]Error loading checkpoint: {e}. Starting from scratch.[/red]"
+                    f"[red]Error loading checkpoint: {e}. Starting from scratch for this run.[/red]"
                 )
                 self.start_epoch = 0
                 self.total_steps_trained = 0
         else:
-            self.console.print("No checkpoint found. Starting training from scratch.")
+            self.console.print(
+                "No run-specific checkpoint found. Starting training from scratch."
+            )
             self.start_epoch = 0
             self.total_steps_trained = 0
 
     def _print_validation_example(
         self, map_tensor: torch.Tensor, true_score: float, pred_score: float, index: int
     ):
-        """Prints a single validation map example with scores."""
+        """Prints a single validation map example with scores using Rich."""
         if map_tensor.ndim != 2:
             self.console.print(
                 f"[red]Error: Invalid map dimensions for printing ({map_tensor.shape})[/red]"
             )
             return
 
-        map_np = map_tensor.numpy().astype(int)
+        map_np = map_tensor.cpu().numpy().astype(int)
         map_size_x, map_size_y = map_np.shape
-        # Define colors based on request
+
         colors = {
-            0: "dim grey50",  # Dim gray for 0
+            0: "dim grey50",
             1: "white",
-            6: "bright_green",  # Bright green for 6
-            # Add specific reds for 2-5 if needed, otherwise one red
+            6: "bright_green",
             2: "bright_red",
             3: "red",
             4: "dark_red",
             5: "red3",
         }
-        default_color = "magenta"  # For any unexpected tile values
-        char_width = 2  # Width for each tile cell
+        default_color = "magenta"
+        char_width = 2
 
         table = Table(
             title=f"Validation Map Example #{index + 1}",
@@ -439,16 +466,12 @@ class NeuralCriticTrainer:
             table.add_column(justify="center", width=char_width)
 
         for r in range(map_size_x):
-            row_cells = []
-            for tile in map_np[r]:
-                color = colors.get(tile, default_color)
-                # Right-align tile value within the cell width
-                row_cells.append(
-                    f"[{color}]{tile:>{char_width-1}} [/]"
-                )  # Add space for padding
+            row_cells = [
+                f"[{colors.get(tile, default_color)}]{tile:>{char_width-1}} [/]"
+                for tile in map_np[r]
+            ]
             table.add_row(*row_cells)
 
-        # Print map and scores
         self.console.print(table)
         score_text = Text.assemble(
             "  Scores: ",
@@ -460,13 +483,16 @@ class NeuralCriticTrainer:
             (
                 f"{pred_score - true_score:+.4f}",
                 "bright_red" if abs(pred_score - true_score) > 0.1 else "dim",
-            ),  # Color diff
+            ),
         )
         self.console.print(score_text)
-        self.console.print("-" * (map_size_y * (char_width + 1) + 1))  # Separator line
+        self.console.print("-" * (map_size_y * (char_width + 1) + 1))
 
     def _validate(self) -> float:
-        """Performs validation and prints example maps if configured."""
+        """
+        Performs validation on a set of batches and returns the average MSE loss.
+        Optionally prints example maps.
+        """
         self.model.eval()
         total_val_loss = 0.0
         num_batches = self.config.validation_batches
@@ -474,54 +500,39 @@ class NeuralCriticTrainer:
             self.model.train()
             return 0.0
 
-        # Store data from the *last* batch for printing examples
-        last_batch_maps = None
+        last_batch_maps_cpu = None
         last_batch_true_scores = None
         last_batch_pred_scores = None
 
         with torch.no_grad():
             for i in range(num_batches):
-                val_maps, val_true_scores = generate_batch(
+                val_maps_nn, val_true_scores = generate_batch(
                     self.config.batch_size,
                     self.config,
                     self.critic_func,
                     self.device,
                 )
-                val_pred_scores = self.model(val_maps)
+                val_pred_scores = self.model(val_maps_nn)
                 val_loss = self.criterion(val_pred_scores, val_true_scores)
                 total_val_loss += val_loss.item()
 
-                # If this is the last batch, store its data
                 if i == num_batches - 1:
-                    # We need the original map data *before* unsqueeze/float
-                    # Regenerate maps for the last batch on CPU to print original ints
-                    # This avoids storing potentially large tensors on GPU during loop
-                    last_batch_maps_cpu = torch.stack(
-                        [
-                            generate_random_map(self.config)
-                            for _ in range(val_maps.size(0))
-                        ]  # Use actual batch size
-                    )
-                    last_batch_maps = (
-                        last_batch_maps_cpu  # Store the IntTensor (B, H, W)
-                    )
-                    last_batch_true_scores = val_true_scores.squeeze(-1).cpu()  # (B,)
-                    last_batch_pred_scores = val_pred_scores.squeeze(-1).cpu()  # (B,)
+                    last_batch_maps_cpu = val_maps_nn.squeeze(1).cpu()
+                    last_batch_true_scores = val_true_scores.squeeze(-1).cpu()
+                    last_batch_pred_scores = val_pred_scores.squeeze(-1).cpu()
 
         avg_val_loss = total_val_loss / num_batches
-        self.model.train()  # Set back to training mode
+        self.model.train()
 
-        # --- Print Validation Map Examples ---
         if (
             self.config.print_validation_maps
-            and last_batch_maps is not None
+            and last_batch_maps_cpu is not None
             and last_batch_true_scores is not None
             and last_batch_pred_scores is not None
         ):
-
             num_examples = min(
                 self.config.num_validation_maps_to_print,
-                last_batch_maps.shape[0],  # Don't try to print more than batch size
+                last_batch_maps_cpu.shape[0],
             )
             if num_examples > 0:
                 self.console.print(
@@ -531,9 +542,9 @@ class NeuralCriticTrainer:
                         expand=False,
                     )
                 )
-                indices = random.sample(range(last_batch_maps.shape[0]), num_examples)
+                indices = random.sample(range(last_batch_maps_cpu.shape[0]), num_examples)
                 for i, idx in enumerate(indices):
-                    map_to_print = last_batch_maps[idx]  # Shape (H, W)
+                    map_to_print = last_batch_maps_cpu[idx]
                     true_score = last_batch_true_scores[idx].item()
                     pred_score = last_batch_pred_scores[idx].item()
                     self._print_validation_example(
@@ -546,12 +557,11 @@ class NeuralCriticTrainer:
         return avg_val_loss
 
     def train(self):
-        """Runs the main training loop."""
-        # (Train loop logic mostly unchanged, but _validate now handles printing)
+        """Runs the main training loop for the MLP critic."""
         cfg = self.config
         self.console.print(
             Panel.fit(
-                f"Starting Neural Critic Training: run='{cfg.run_name}', model='{self.model_type}'",
+                f"Starting Neural Critic Training: run='{cfg.run_name}', model='MLP'",
                 title="Setup",
                 border_style="blue",
             )
@@ -568,6 +578,9 @@ class NeuralCriticTrainer:
             f"Map Gen Steps: {cfg.map_gen_min_steps}-{cfg.map_gen_max_steps}, Empty: {cfg.tile_empty_prob:.2f}, Door: {cfg.tile_door_prob:.2f}, Enemy: {cfg.tile_enemy_prob:.2f}"
         )
         self.console.print(f"Checkpoints Dir: [green]{cfg.checkpoint_dir}[/green]")
+        self.console.print(
+            f"Initial Checkpoint Path: [cyan]{INITIAL_CHECKPOINT_PATH}[/cyan]"
+        )
 
         self._load_checkpoint()
         if self.start_epoch >= cfg.num_epochs:
@@ -597,50 +610,41 @@ class NeuralCriticTrainer:
         self.model.train()
         with progress:
             task = progress.add_task(
-                f"[cyan]Training Critic ({self.model_type})",
+                "[cyan]Training Critic (MLP)",
                 total=total_training_steps,
                 completed=self.total_steps_trained,
                 metrics=initial_metrics,
             )
-            current_step_in_epoch = self.total_steps_trained % cfg.steps_per_epoch
             last_logged_train_mse = float("nan")
+            last_logged_val_mse = float("nan")
 
             while self.total_steps_trained < total_training_steps:
                 current_epoch = self.total_steps_trained // cfg.steps_per_epoch
-                maps, true_scores = generate_batch(
+
+                maps_nn, true_scores = generate_batch(
                     cfg.batch_size, cfg, self.critic_func, self.device
                 )
-                predicted_scores = self.model(maps)
+                predicted_scores = self.model(maps_nn)
                 loss = self.criterion(predicted_scores, true_scores)
+
                 self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
+
                 self.total_steps_trained += 1
-                current_step_in_epoch = self.total_steps_trained % cfg.steps_per_epoch
-                if current_step_in_epoch == 0:
-                    current_step_in_epoch = cfg.steps_per_epoch
                 train_mse = loss.item()
                 last_logged_train_mse = train_mse
 
-                # --- Update Progress Bar & Log ---
-                val_mse_str = "----    "
-                try:
-                    last_val_mse_str = (
-                        progress.tasks[task]
-                        .fields["metrics"]
-                        .split("Val MSE:")[1]
-                        .strip()[:8]
-                    )
-                except (IndexError, KeyError):
-                    last_val_mse_str = "----    "
-                metrics_str = f" Train MSE:[red]{train_mse:>8.4f}[/]| Val MSE:{last_val_mse_str}"
+                val_mse_str = (
+                    f"{last_logged_val_mse:.4f}"
+                    if not np.isnan(last_logged_val_mse)
+                    else "----    "
+                )
+                metrics_str = f" Train MSE:[red]{train_mse:>8.4f}[/]| Val MSE:{val_mse_str:>8}"
 
-                if (
-                    self.total_steps_trained > 0
-                    and self.total_steps_trained % cfg.validation_freq == 0
-                ):
-                    # _validate now handles printing internally if configured
+                if self.total_steps_trained % cfg.validation_freq == 0:
                     val_mse = self._validate()
+                    last_logged_val_mse = val_mse
                     val_mse_str = f"{val_mse:.4f}"
                     metrics_str = f" Train MSE:[red]{train_mse:>8.4f}[/]| Val MSE:{val_mse_str:>8}"
                     self._log_metrics(
@@ -652,8 +656,8 @@ class NeuralCriticTrainer:
 
                 progress.update(task, advance=1, metrics=metrics_str)
 
-                # --- Checkpointing ---
-                if current_step_in_epoch == cfg.steps_per_epoch:
+                is_epoch_end = self.total_steps_trained % cfg.steps_per_epoch == 0
+                if is_epoch_end and self.total_steps_trained > 0: # Avoid saving at step 0 if epoch size matches steps
                     completed_epoch_index = current_epoch
                     if (
                         completed_epoch_index + 1
@@ -661,29 +665,22 @@ class NeuralCriticTrainer:
                         self._save_checkpoint(completed_epoch_index)
                     self._save_checkpoint(completed_epoch_index, is_latest=True)
 
-        # --- End of Training ---
         self.console.print(
             Panel(
-                f"Training finished after {cfg.num_epochs} epochs ({self.total_steps_trained:,} total steps). Model: {self.model_type}",
+                f"Training finished after {cfg.num_epochs} epochs ({self.total_steps_trained:,} total steps). Model: MLP",
                 title="Complete",
                 border_style="green",
             )
         )
         final_epoch_index = cfg.num_epochs - 1
-        self._save_checkpoint(final_epoch_index, is_latest=True)
-        final_chk_path = os.path.join(
-            cfg.checkpoint_dir, f"final_checkpoint_epoch_{cfg.num_epochs}.pth"
-        )
         if (final_epoch_index + 1) % cfg.save_checkpoint_freq_epochs != 0:
-            self._save_checkpoint(final_epoch_index)
-            self.console.print(
-                f"Final checkpoint saved to: [green]{final_chk_path}[/green]"
-            )
+             self._save_checkpoint(final_epoch_index)
+        self._save_checkpoint(final_epoch_index, is_latest=True)
 
 
-# --- Main Execution ---
 if __name__ == "__main__":
     CONFIG_PATH = "neural_critic_config.yaml"
+    config: CriticConfig
     if os.path.exists(CONFIG_PATH):
         print(f"Loading configuration from {CONFIG_PATH}")
         config = configure_critic_from_yaml(CONFIG_PATH)
@@ -692,7 +689,6 @@ if __name__ == "__main__":
             f"Configuration file '{CONFIG_PATH}' not found. Using default CriticConfig."
         )
         config = CriticConfig()
-        config.use_mlp_critic = True
 
     trainer = NeuralCriticTrainer(config, actual_critic)
     try:
@@ -714,7 +710,7 @@ if __name__ == "__main__":
         else:
             print("No checkpoint saved as training interrupted very early.")
     except Exception as e:
-        trainer.console.print_exception(show_locals=True)
+        trainer.console.print_exception(show_locals=False)
         print(
             "\n[red]An error occurred during training. Attempting to save final checkpoint...[/red]"
         )
@@ -731,60 +727,50 @@ if __name__ == "__main__":
         else:
             print("No checkpoint saved due to early error.")
 
-    # --- Optional: Test the trained model (Unchanged) ---
     console = Console()
-    print("\n--- Optional: Testing Trained Critic Approximator ---")
+    print("\n--- Optional: Testing Trained MLP Critic Approximator ---")
     try:
         test_config = trainer.config
         test_device = trainer.device
-        model_type_used = "MLP" if test_config.use_mlp_critic else "CNN"
-        console.print(
-            f"Attempting to test the trained [bold blue]{model_type_used}[/] model..."
-        )
-        if test_config.use_mlp_critic:
-            test_model = CriticApproximatorMLP(
-                input_size=test_config.map_size[0] * test_config.map_size[1],
-                hidden_sizes=test_config.mlp_hidden_sizes,
-                dropout_prob=test_config.mlp_dropout_prob,
-            ).to(test_device)
-        else:
-            test_model = CriticApproximatorCNN(
-                channels=test_config.cnn_channels,
-                input_size=test_config.map_size,
-                hidden_fc_size=test_config.cnn_fc_hidden_size,
-            ).to(test_device)
+        console.print("Attempting to test the trained [bold blue]MLP[/] model...")
+
+        test_model = CriticApproximatorMLP(
+            input_size=test_config.map_size[0] * test_config.map_size[1],
+            hidden_sizes=test_config.mlp_hidden_sizes,
+            dropout_prob=test_config.mlp_dropout_prob,
+        ).to(test_device)
+
         latest_checkpoint_path = os.path.join(
             test_config.checkpoint_dir, "latest_checkpoint.pth"
         )
+
         if os.path.exists(latest_checkpoint_path):
-            checkpoint = torch.load(latest_checkpoint_path, map_location=test_device)
-            chk_cfg = checkpoint.get("config")
-            assert not (
-                chk_cfg
-                and hasattr(chk_cfg, "use_mlp_critic")
-                and chk_cfg.use_mlp_critic != test_config.use_mlp_critic
-            ), "Model type mismatch in test"
+            # Use weights_only=False here too if the saved checkpoint includes the config
+            checkpoint = torch.load(latest_checkpoint_path, map_location=test_device, weights_only=False)
             test_model.load_state_dict(checkpoint["model_state_dict"])
             test_model.eval()
             console.print(
                 f"Loaded model state from [green]{latest_checkpoint_path}[/green] for testing."
             )
+
             test_maps_nn, test_true_scores = generate_batch(
                 5, test_config, actual_critic, test_device
             )
             with torch.no_grad():
                 test_pred_scores = test_model(test_maps_nn)
+
             console.print("\nSample Predictions vs True Scores:")
-            table = Table(title=f"Critic Approximation Test ({model_type_used})")
+            table = Table(title="MLP Critic Approximation Test")
             table.add_column("Map Index", style="cyan")
             table.add_column("Predicted Score", style="magenta", justify="right")
             table.add_column("True Score (from critic)", style="green", justify="right")
             table.add_column("Difference", style="red", justify="right")
+
             for i in range(test_pred_scores.shape[0]):
                 pred = test_pred_scores[i].item()
                 true = test_true_scores[i].item()
                 diff = pred - true
-                table.add_row(str(i), f"{pred:.4f}", f"{true:.4f}", f"{diff:.4f}")
+                table.add_row(str(i), f"{pred:.4f}", f"{true:.4f}", f"{diff:+.4f}")
             console.print(table)
         else:
             console.print(
@@ -794,8 +780,6 @@ if __name__ == "__main__":
         console.print(
             "[yellow]Trained model checkpoint not available for testing.[/yellow]"
         )
-    except ValueError as e:
-        console.print(f"[red]Testing failed: {e}[/red]")
     except Exception as e:
         console.print(f"[red]Testing failed: {e}[/red]")
-        console.print_exception()
+        console.print_exception(show_locals=False)
