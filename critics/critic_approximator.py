@@ -25,10 +25,10 @@ from rich.progress import (
 from rich.table import Table
 from rich.text import Text
 
-from daedalus.critics import level_critic as actual_critic
+from daedalus.critics.level_criticv4 import level_critic as actual_critic
 
 INITIAL_CHECKPOINT_PATH = (
-    "neural_critic_checkpoints/critic_MLP_20250422_113333/latest_checkpoint.pth"
+    "neural_critic_checkpoints/critic_MLP_20250422_113333/latest_checkpoint.pth" # make this "" when running from start
 )
 
 
