@@ -14,7 +14,9 @@ dependencies = [
     "pytest>=8.3.5",
     "rich>=14.0.0",
     "scipy>=1.15.2",
+    "tensordict>=0.7.2",
     "tensorflow>=2.19.0",
     "torch>=2.6.0",
+    "torchrl>=0.7.2",
     "torchvision>=0.21.0",
 ]
