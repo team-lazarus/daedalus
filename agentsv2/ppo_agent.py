@@ -344,13 +344,13 @@ class PPOTrainer:
             return
 
         color_map = {
-            0: "[black] [/black]",  # Empty/Wall
-            1: "[white]█[/white]",  # Path
-            2: "[red]X[/red]",  # Enemy
-            3: "[red]X[/red]",  # Damaged Enemy?
-            4: "[red]X[/red]",  # Dead Enemy?
-            5: "[red]X[/red]",  # Player (if present)
-            6: "[green]D[/green]",  # Door
+            0: "[grey27]0[/grey27]",  # Empty/Wall
+            1: "[white]1[/white]",  # Path
+            2: "[red]2[/red]",  # Enemy
+            3: "[red]3[/red]",  # Damaged Enemy?
+            4: "[red]4[/red]",  # Dead Enemy?
+            5: "[red]5[/red]",  # Player (if present)
+            6: "[green]6[/green]",  # Door
         }
 
         self.console.print(f"\n{title}")
@@ -537,15 +537,7 @@ class PPOTrainer:
             )
             return 0
         except Exception as e:
-            self.logger.exception(
-                f"Error loading checkpoint from {checkpoint_path}: {e}"
-            )
-            self.console.print(f"[red]Error loading checkpoint: {e}[/red]")
-            self.console.print(
-                "[yellow]Starting training from scratch due to loading error.[/yellow]"
-            )
-            # Reset metrics if loading failed partially
-            self._initialize_metrics()
+            self.logger.exception(e)
             return 0
 
     def select_action(
@@ -811,9 +803,9 @@ class PPOTrainer:
                     v_loss=0.0,  # Initial fields
                 )
 
-                self.current_observation = self._reset_environment()
 
                 for episode in range(start_episode, total_episodes):
+                    self.current_observation = self._reset_environment()
                     self.metrics["episode"] = episode
                     episode_rewards_sum = np.zeros(self.env_batch_size)
                     episode_true_lengths = np.zeros(
@@ -834,6 +826,7 @@ class PPOTrainer:
                     # --- Rollout Phase ---
                     self.logger.debug(f"Starting Episode {episode}")
                     steps_collected_in_episode = 0
+                    
                     while steps_collected_in_episode < self.steps_per_episode:
                         # 1. Select action and get value estimate
                         actions, log_probs, values = self.select_action(
@@ -845,6 +838,12 @@ class PPOTrainer:
                             self._step_environment(actions)
                         )
                         steps_collected_in_episode += 1
+                        if steps_collected_in_episode == self.steps_per_episode-1:
+                            self.visualize_maps(
+                                getattr(self.env, "maps", None),
+                                f"Final Maps (Episode {episode} End)",
+                            )
+
                         terminals = dones | truncateds  # Combined flag for resets etc.
 
                         # 3. Store transition
@@ -917,6 +916,7 @@ class PPOTrainer:
                             # Break inner loop if desired, but fixed steps_per_episode is simpler
                             # break
 
+                    
                     # --- End of Episode ---
                     # Calculate and store episode metrics
                     avg_ep_reward = np.mean(episode_rewards_sum)
@@ -998,10 +998,7 @@ class PPOTrainer:
                     )
 
                     # Visualize final maps for the episode
-                    self.visualize_maps(
-                        getattr(self.env, "maps", None),
-                        f"Final Maps (Episode {episode} End)",
-                    )
+                    
 
                     # Save checkpoint periodically
                     if episode > 0 and episode % checkpoint_interval == 0:
@@ -1036,7 +1033,7 @@ class PPOTrainer:
 if __name__ == "__main__":
     trainer = PPOTrainer(
         env_mode="TURTLE",
-        batch_size=32,
+        batch_size=8192//64,
         learning_rate=3e-4,
         gamma=0.99,
         gae_lambda=0.95,
@@ -1050,9 +1047,9 @@ if __name__ == "__main__":
         log_dir="ppo_daedalus_logs",
         critic_path="latest_checkpoint.pth",  # "latest_checkpoint.pth" # Set path if needed
         map_size=(12, 12),
-        steps_per_episode=512,  # Total steps collected across envs per episode
+        steps_per_episode=256,  # Total steps collected across envs per episode
         update_interval=128,  # Perform PPO update every 128 steps
-        num_episodes=20000,
+        num_episodes=50000,
         mini_batch_factor=4,
         log_level=logging.INFO,  # Change to logging.DEBUG for more detail
         log_window_size=50,

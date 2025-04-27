@@ -5,9 +5,63 @@ import numpy as np
 import os
 from typing import Tuple, Dict, Any, Optional, List, Union
 
+from rich.console import Console
+from rich.table import Table
+from rich.progress import (
+    Progress,
+    BarColumn,
+    TextColumn,
+    TimeRemainingColumn,
+    MofNCompleteColumn,
+    TaskID,
+)
+from rich import print as rprint
+
+
 # Assuming Daedalus constants and critic model are correctly imported
 import daedalus.utils.constants as c
 from daedalus.critics.critic_approximator import CriticApproximatorMLP
+
+console = Console()
+
+def visualize_maps(map, x, y, title: str ="- Map 0 -") -> None:
+        """Visualize maps using rich."""
+
+        color_map = {
+            0: "[grey27]0[/grey27]",  # Empty/Wall
+            1: "[white]1[/white]",  # Path
+            2: "[red]2[/red]",  # Enemy
+            3: "[red]3[/red]",  # Damaged Enemy?
+            4: "[red]4[/red]",  # Dead Enemy?
+            5: "[red]5[/red]",  # Player (if present)
+            6: "[green]6[/green]",  # Door
+        }
+
+        console.print(f"\n{title}")
+
+        table = Table(
+            title=title,
+            show_header=False,
+            show_lines=False,
+            box=None,
+            padding=0,
+        )
+
+        map_height, map_width = map.shape[0], map.shape[1]
+        for _ in range(map_width):
+            table.add_column()  # No header text needed
+
+        for j in range(map_height):
+            row = []
+            for k in range(map_width):
+                cell_value = int(map[j, k].item())
+                if j == x and k == y:
+                    row.append(f"[yellow]{cell_value}[/yellow]")
+                row.append(color_map.get(cell_value, f"[cyan]{cell_value}[/cyan]"))
+            table.add_row(*row)
+
+        console.print(table)
+        rprint("")  # Use rich print for spacing
 
 
 class DaedalusEnvironment:
@@ -139,6 +193,7 @@ class DaedalusEnvironment:
 
         # Create and return the initial observations
         initial_observations = self._create_observations()
+        print("RESET")
         return initial_observations
 
     def step(
@@ -191,10 +246,13 @@ class DaedalusEnvironment:
                 if act < c.MODIFICATION_ACTIONS:  # Modification action
                     self.maps[i, current_row, current_col] = act
                     self.consecutive_moves[i] = 0  # Reset consecutive moves counter
+                    
                 else:  # Movement action (index >= c.MODIFICATION_ACTIONS)
-                    move_index = (
-                        act - c.MODIFICATION_ACTIONS
-                    )  # Adjust index for MOVE_ACTION dict
+                    if i == 0:
+                        pass
+                        #print(current_row, current_col)
+                        #visualize_maps(self.maps[i], current_row, current_col)
+                    move_index = act # Adjust index for MOVE_ACTION dict
                     if move_index in c.MOVE_ACTION:
                         self.consecutive_moves[i] += 1
                         move_func = c.MOVE_ACTION[move_index]
@@ -202,9 +260,12 @@ class DaedalusEnvironment:
                         new_row, new_col = move_func(
                             current_row.item(),
                             current_col.item(),
-                            self.map_size[0] - 1,
-                            self.map_size[1] - 1,
+                            self.map_size[1],
                         )
+                        """
+                        if i == 0:
+                            print("new:",new_row, new_col)
+                        """
                         self.current_positions[i, 0] = new_row
                         self.current_positions[i, 1] = new_col
 
