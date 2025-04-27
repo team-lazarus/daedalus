@@ -300,7 +300,7 @@ class DaedalusEnvironment:
                 # Overwrite the observation for the reset environments with the new initial state
                 next_observations[idx] = self._create_observation_for_index(idx.item())
 
-        return next_observations, rewards_np, dones_np, truncateds_np, infos
+        return next_observations, rewards_np / 100, dones_np, truncateds_np, infos
 
     def _apply_random_walk(self, batch_idx: int):
         """Apply random walk algorithm to generate a map for a specific batch index."""
