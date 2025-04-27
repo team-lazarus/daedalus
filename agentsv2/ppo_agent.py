@@ -575,6 +575,12 @@ class PPOTrainer:
         dones: torch.Tensor,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Calculates Generalized Advantage Estimation (GAE) and returns."""
+        # Ensure all tensors are on the correct device
+        rewards = rewards.to(self.device)
+        values = values.to(self.device)
+        next_values = next_values.to(self.device)
+        dones = dones.to(self.device)
+        
         num_steps = rewards.shape[0]
         advantages = torch.zeros_like(rewards, device=self.device)
         last_gae_lam = 0.0
@@ -620,16 +626,12 @@ class PPOTrainer:
 
         # 1. Prepare Data from Buffer
         try:
-            observations = torch.stack(
-                [step.observation for step in self.rollout_buffer]
-            )
-            actions = torch.stack([step.action for step in self.rollout_buffer])
-            old_log_probs = torch.stack([step.log_prob for step in self.rollout_buffer])
-            values = torch.stack([step.value for step in self.rollout_buffer])
-            rewards = torch.stack([step.reward for step in self.rollout_buffer])
-            dones = torch.stack(
-                [step.done for step in self.rollout_buffer]
-            )  # Use 'done' for GAE mask
+            observations = torch.stack([step.observation for step in self.rollout_buffer]).to(self.device)
+            actions = torch.stack([step.action for step in self.rollout_buffer]).to(self.device)
+            old_log_probs = torch.stack([step.log_prob for step in self.rollout_buffer]).to(self.device)
+            values = torch.stack([step.value for step in self.rollout_buffer]).to(self.device)
+            rewards = torch.stack([step.reward for step in self.rollout_buffer]).to(self.device)
+            dones = torch.stack([step.done for step in self.rollout_buffer]).to(self.device)
         except Exception as e:
             self.logger.exception(f"Error stacking data from rollout buffer: {e}")
             self.rollout_buffer.clear()  # Clear potentially corrupted buffer
