@@ -7,7 +7,8 @@ from typing import Tuple, Callable, Optional, Dict, Any
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
-from config import TrainConfig # Assuming config.py is in the same directory
+from config import TrainConfig  # Assuming config.py is in the same directory
+
 
 # --- Map and Hero Generation ---
 def create_random_hero_tensor(size: int, device: torch.device) -> torch.Tensor:
@@ -21,17 +22,20 @@ def create_random_hero_tensor(size: int, device: torch.device) -> torch.Tensor:
     # Ensure tensor size matches config.hero_tensor_size if different logic needed
     if size != 5:
         # Adjust logic if hero tensor definition changes
-         raise ValueError(f"Hero tensor size mismatch. Expected 5, got {size}")
+        raise ValueError(f"Hero tensor size mismatch. Expected 5, got {size}")
 
     # Concatenate and ensure float type for the network
     hero = torch.cat([health, item1, item2, direction, rooms_left]).float()
-    return hero # Shape: [5]
+    return hero  # Shape: [5]
 
-def generate_initial_map(map_size: Tuple[int, int], walk_steps: int) -> Tuple[np.ndarray, Tuple[int, int]]:
+
+def generate_initial_map(
+    map_size: Tuple[int, int], walk_steps: int
+) -> Tuple[np.ndarray, Tuple[int, int]]:
     """Generates an initial map via random walk."""
     rows, cols = map_size
-    grid = np.zeros((rows, cols), dtype=int) # Start with all walls (0)
-    
+    grid = np.zeros((rows, cols), dtype=int)  # Start with all walls (0)
+
     # Start at a random position
     start_pos = current_pos = (random.randint(0, rows - 1), random.randint(0, cols - 1))
 
@@ -43,12 +47,17 @@ def generate_initial_map(map_size: Tuple[int, int], walk_steps: int) -> Tuple[np
         # Move to a random neighbor (staying within bounds)
         possible_moves = []
         r, c = current_pos
-        if r > 0: possible_moves.append((r - 1, c))
-        if r < rows - 1: possible_moves.append((r + 1, c))
-        if c > 0: possible_moves.append((r, c - 1))
-        if c < cols - 1: possible_moves.append((r, c + 1))
+        if r > 0:
+            possible_moves.append((r - 1, c))
+        if r < rows - 1:
+            possible_moves.append((r + 1, c))
+        if c > 0:
+            possible_moves.append((r, c - 1))
+        if c < cols - 1:
+            possible_moves.append((r, c + 1))
 
-        if not possible_moves: break # Should not happen on reasonable map size
+        if not possible_moves:
+            break  # Should not happen on reasonable map size
         current_pos = random.choice(possible_moves)
 
     # Ensure start position is empty if overwritten
@@ -60,14 +69,15 @@ def generate_initial_map(map_size: Tuple[int, int], walk_steps: int) -> Tuple[np
 # --- Rich Printing ---
 TILE_COLORS = {
     0: "grey50",  # Wall
-    1: "white",   # Empty
-    2: "red",     # Enemy
-    3: "red",     # Enemy
-    4: "red",     # Enemy
-    5: "red",     # Enemy
-    6: "green",   # Door
+    1: "white",  # Empty
+    2: "red",  # Enemy
+    3: "red",  # Enemy
+    4: "red",  # Enemy
+    5: "red",  # Enemy
+    6: "green",  # Door
 }
-DEFAULT_COLOR = "bright_black" # For unknown tile types
+DEFAULT_COLOR = "bright_black"  # For unknown tile types
+
 
 def format_map_rich(grid: np.ndarray, title: str = "Map") -> Panel:
     """Formats a map numpy array into a Rich Panel."""
@@ -88,6 +98,7 @@ def format_map_rich(grid: np.ndarray, title: str = "Map") -> Panel:
 
     return Panel(table, title=title, border_style="blue")
 
+
 # --- Checkpointing ---
 def save_checkpoint(state: Dict[str, Any], filepath: str) -> None:
     """Saves training state to a file."""
@@ -96,6 +107,7 @@ def save_checkpoint(state: Dict[str, Any], filepath: str) -> None:
         os.makedirs(directory, exist_ok=True)
     torch.save(state, filepath)
     print(f"Checkpoint saved to {filepath}")
+
 
 def load_checkpoint(filepath: str, device: torch.device) -> Optional[Dict[str, Any]]:
     """Loads training state from a file."""
@@ -110,6 +122,7 @@ def load_checkpoint(filepath: str, device: torch.device) -> Optional[Dict[str, A
         print(f"Error loading checkpoint from {filepath}: {e}")
         return None
 
+
 # --- Device Handling ---
 def get_device(requested: str = "auto") -> torch.device:
     """Gets the appropriate torch device."""
@@ -117,5 +130,5 @@ def get_device(requested: str = "auto") -> torch.device:
         return torch.device("cuda")
     elif requested == "cpu":
         return torch.device("cpu")
-    else: # 'auto' or fallback
+    else:  # 'auto' or fallback
         return torch.device("cuda" if torch.cuda.is_available() else "cpu")

@@ -1159,4 +1159,3 @@ if __name__ == "__main__":
     except Exception as e:
         console.print(f"[red]Network forward pass test failed: {e}[/red]")
         console.print_exception()
-

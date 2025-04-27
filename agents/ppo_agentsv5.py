@@ -63,6 +63,7 @@ except ImportError as e:
             CriticConfig,
             configure_critic_from_yaml,
         )
+
         print("Relative import successful.")
     except ImportError as inner_e:
         print(f"Relative import failed: {inner_e}")
@@ -128,7 +129,7 @@ class PolicyNetworkEncoder(nn.Module):
             Latent representation tensor (N, output_size).
         """
         if x.dim() == 4:  # (N, C, H, W)
-             x = x.squeeze(1) # Remove channel dim if present -> (N, H, W)
+            x = x.squeeze(1)  # Remove channel dim if present -> (N, H, W)
 
         x_flat = torch.flatten(x, start_dim=1)
         hero_tensor = hero_tensor.float()
@@ -328,7 +329,9 @@ class PPOConfig:
     encoder_hidden_dims: List[int] = field(default_factory=lambda: [512, 512])
 
     use_neural_critic: bool = True
-    neural_critic_checkpoint_path: str = "critics/neural_critic_checkpoints/critic_MLP_latest/latest_checkpoint.pth"
+    neural_critic_checkpoint_path: str = (
+        "critics/neural_critic_checkpoints/critic_MLP_latest/latest_checkpoint.pth"
+    )
 
     batch_size: int = field(init=False)
     action_dim: int = field(init=False)
@@ -337,8 +340,10 @@ class PPOConfig:
         """Calculate derived properties after initialization."""
         self.batch_size = self.num_envs * self.n_steps_per_rollout
         if self.minibatch_size <= 0:
-             print(f"Warning: Invalid minibatch_size ({self.minibatch_size}), setting to batch_size ({self.batch_size}).")
-             self.minibatch_size = self.batch_size
+            print(
+                f"Warning: Invalid minibatch_size ({self.minibatch_size}), setting to batch_size ({self.batch_size})."
+            )
+            self.minibatch_size = self.batch_size
         elif self.batch_size % self.minibatch_size != 0:
             print(
                 f"Warning: Minibatch size ({self.minibatch_size}) is not a divisor of the "
@@ -383,7 +388,10 @@ def configure_from_yaml(yaml_path: str) -> PPOConfig:
         if "use_neural_critic" in filtered_config:
             val = filtered_config["use_neural_critic"]
             filtered_config["use_neural_critic"] = str(val).lower() in [
-                "true", "1", "yes", "y",
+                "true",
+                "1",
+                "yes",
+                "y",
             ]
 
         if "map_size" in filtered_config and isinstance(
@@ -455,9 +463,11 @@ def initialize_map_hero(
     for _ in range(config.initial_map_walk_steps):
         is_empty = random.random() < config.initial_map_empty_prob
         if is_empty:
-            tile_value = 1 if random.random() < 0.9 else 6 # Small chance of placing a door
+            tile_value = (
+                1 if random.random() < 0.9 else 6
+            )  # Small chance of placing a door
         else:
-            tile_value = random.randint(2, 5) # Place an enemy type
+            tile_value = random.randint(2, 5)  # Place an enemy type
 
         map_tensor[current_pos] = tile_value
 
@@ -596,10 +606,14 @@ class BatchedEnvSimulator:
                 # Action 0-6: Place tile; 7-10: Move turtle (Up, Left, Down, Right)
                 if 0 <= action_val <= 6:
                     current_map[pos_x, pos_y] = action_val
-                elif action_val == 7: pos_x = max(0, pos_x - 1)
-                elif action_val == 8: pos_y = max(0, pos_y - 1)
-                elif action_val == 9: pos_x = min(self.map_size_x - 1, pos_x + 1)
-                elif action_val == 10: pos_y = min(self.map_size_y - 1, pos_y + 1)
+                elif action_val == 7:
+                    pos_x = max(0, pos_x - 1)
+                elif action_val == 8:
+                    pos_y = max(0, pos_y - 1)
+                elif action_val == 9:
+                    pos_x = min(self.map_size_x - 1, pos_x + 1)
+                elif action_val == 10:
+                    pos_y = min(self.map_size_y - 1, pos_y + 1)
                 self.agent_positions[i] = (pos_x, pos_y)
 
             elif mode == "wide":
@@ -612,7 +626,10 @@ class BatchedEnvSimulator:
                 target_y = flat_index % self.map_size_y
 
                 if 0 <= tile_type < num_tile_types:
-                    if 0 <= target_x < self.map_size_x and 0 <= target_y < self.map_size_y:
+                    if (
+                        0 <= target_x < self.map_size_x
+                        and 0 <= target_y < self.map_size_y
+                    ):
                         current_map[target_x, target_y] = tile_type
                 # Agent position typically doesn't change in 'wide' mode
 
@@ -676,9 +693,7 @@ class PPOMemory:
         self.rewards = torch.zeros(
             (n_steps, num_envs), dtype=torch.float32, device=device
         )
-        self.dones = torch.zeros(
-            (n_steps, num_envs), dtype=torch.bool, device=device
-        )
+        self.dones = torch.zeros((n_steps, num_envs), dtype=torch.bool, device=device)
         self.values = torch.zeros(
             (n_steps, num_envs), dtype=torch.float32, device=device
         )
@@ -790,7 +805,9 @@ class PPOMemory:
             'maps', 'heroes', 'actions', 'old_log_probs', 'advantages', 'returns', 'old_values'.
         """
         if self.advantages is None or self.returns is None:
-            raise ValueError("Advantages/returns must be computed before get_minibatches.")
+            raise ValueError(
+                "Advantages/returns must be computed before get_minibatches."
+            )
 
         num_steps_filled = self.advantages.shape[0]
         num_transitions = num_steps_filled * self.num_envs
@@ -805,8 +822,10 @@ class PPOMemory:
             batch_size = num_transitions
 
         if minibatch_size <= 0 or minibatch_size > batch_size:
-             print(f"Warning: Invalid minibatch_size ({minibatch_size}), adjusting to batch_size ({batch_size}).")
-             minibatch_size = batch_size
+            print(
+                f"Warning: Invalid minibatch_size ({minibatch_size}), adjusting to batch_size ({batch_size})."
+            )
+            minibatch_size = batch_size
 
         flat_maps = self.maps[:num_steps_filled].reshape(
             num_transitions, *self.maps.shape[2:]
@@ -822,9 +841,11 @@ class PPOMemory:
 
         for start_idx in range(0, batch_size, minibatch_size):
             end_idx = min(start_idx + minibatch_size, num_transitions)
-            if start_idx >= end_idx: continue
+            if start_idx >= end_idx:
+                continue
             mb_indices = indices[start_idx:end_idx]
-            if len(mb_indices) == 0: continue
+            if len(mb_indices) == 0:
+                continue
 
             yield {
                 "maps": flat_maps[mb_indices],
@@ -900,9 +921,9 @@ class PPOAgent:
         self.critic.eval()
         with torch.no_grad():
             action_logits = self.actor(map_obs, hero_obs)
-            value = self.critic(map_obs, hero_obs).squeeze(-1) # Shape (N,)
+            value = self.critic(map_obs, hero_obs).squeeze(-1)  # Shape (N,)
 
-            if temperature > 1e-8: # Avoid division by zero or near-zero
+            if temperature > 1e-8:  # Avoid division by zero or near-zero
                 scaled_logits = action_logits / temperature
             else:
                 scaled_logits = action_logits
@@ -913,7 +934,7 @@ class PPOAgent:
             if temperature > 1e-8:
                 action = dist.sample()
             else:
-                action = torch.argmax(probs, dim=-1) # Deterministic
+                action = torch.argmax(probs, dim=-1)  # Deterministic
 
             log_prob = dist.log_prob(action)
 
@@ -939,7 +960,7 @@ class PPOAgent:
                 - entropy: Entropy of the action distribution for the states (MB,).
         """
         action_logits = self.actor(map_obs, hero_obs)
-        value = self.critic(map_obs, hero_obs).squeeze(-1) # Shape (MB,)
+        value = self.critic(map_obs, hero_obs).squeeze(-1)  # Shape (MB,)
 
         probs = F.softmax(action_logits, dim=-1)
         dist = Categorical(probs=probs)
@@ -960,11 +981,16 @@ class PPOAgent:
             A dictionary containing average metrics from the update process.
         """
         if memory.advantages is None or memory.returns is None:
-            raise RuntimeError("memory.compute_gae_returns() must be called before update()")
+            raise RuntimeError(
+                "memory.compute_gae_returns() must be called before update()"
+            )
 
         all_metrics = {
-            "policy_loss": [], "value_loss": [], "entropy": [],
-            "approx_kl": [], "clip_fraction": [],
+            "policy_loss": [],
+            "value_loss": [],
+            "entropy": [],
+            "approx_kl": [],
+            "clip_fraction": [],
         }
 
         for _ in range(self.config.num_epochs_per_update):
@@ -990,9 +1016,14 @@ class PPOAgent:
                 log_ratio = new_log_probs - mb_old_log_probs
                 ratio = torch.exp(log_ratio)
                 surr1 = ratio * mb_advantages
-                surr2 = torch.clamp(
-                    ratio, 1.0 - self.config.clip_epsilon, 1.0 + self.config.clip_epsilon
-                ) * mb_advantages
+                surr2 = (
+                    torch.clamp(
+                        ratio,
+                        1.0 - self.config.clip_epsilon,
+                        1.0 + self.config.clip_epsilon,
+                    )
+                    * mb_advantages
+                )
                 policy_loss = -torch.min(surr1, surr2).mean()
 
                 # Value Loss (MSE)
@@ -1052,15 +1083,17 @@ class PPOAgent:
                 "actor_state_dict": self.actor.state_dict(),
                 "critic_state_dict": self.critic.state_dict(),
                 "optimizer_state_dict": self.optimizer.state_dict(),
-                "config": self.config, # Save config for reference
+                "config": self.config,  # Save config for reference
             }
             torch.save(checkpoint, temp_path)
-            os.replace(temp_path, path) # Atomic replace
+            os.replace(temp_path, path)  # Atomic replace
         except Exception as e:
             print(f"[ERROR] Failed to save checkpoint to {path}: {e}")
             if os.path.exists(temp_path):
-                try: os.remove(temp_path)
-                except OSError: pass
+                try:
+                    os.remove(temp_path)
+                except OSError:
+                    pass
 
     def load_checkpoint(self, path: str) -> int:
         """
@@ -1073,7 +1106,9 @@ class PPOAgent:
             The episode number to start training from (last completed episode + 1).
         """
         if not os.path.exists(path):
-            print(f"[Warning] Checkpoint file not found at {path}. Starting from episode 0.")
+            print(
+                f"[Warning] Checkpoint file not found at {path}. Starting from episode 0."
+            )
             return 0
         try:
             checkpoint = torch.load(path, map_location=self.device)
@@ -1082,15 +1117,22 @@ class PPOAgent:
             chk_config = checkpoint.get("config")
             if isinstance(chk_config, PPOConfig):
                 mismatched = []
-                if chk_config.action_dim != self.config.action_dim: mismatched.append("ActionDim")
-                if chk_config.mode != self.config.mode: mismatched.append("Mode")
-                if chk_config.map_size != self.config.map_size: mismatched.append("MapSize")
+                if chk_config.action_dim != self.config.action_dim:
+                    mismatched.append("ActionDim")
+                if chk_config.mode != self.config.mode:
+                    mismatched.append("Mode")
+                if chk_config.map_size != self.config.map_size:
+                    mismatched.append("MapSize")
                 # Add more checks for network architecture parameters if needed
                 if mismatched:
-                    print(f"[Warning] Config mismatch! Checkpoint vs Current: {', '.join(mismatched)}")
+                    print(
+                        f"[Warning] Config mismatch! Checkpoint vs Current: {', '.join(mismatched)}"
+                    )
                     print("Loading weights anyway, but behavior may be unpredictable.")
             else:
-                print("[Warning] Checkpoint PPOConfig missing or invalid. Cannot check compatibility.")
+                print(
+                    "[Warning] Checkpoint PPOConfig missing or invalid. Cannot check compatibility."
+                )
 
             self.actor.load_state_dict(checkpoint["actor_state_dict"])
             self.critic.load_state_dict(checkpoint["critic_state_dict"])
@@ -1100,14 +1142,22 @@ class PPOAgent:
             self.total_updates_performed = checkpoint.get("total_updates_performed", 0)
             start_episode = checkpoint.get("episode", -1) + 1
 
-            print(f"Checkpoint loaded from {path}. Resuming from episode {start_episode}.")
-            print(f"  -> Steps Interacted: {self.total_steps_interacted:,}, Updates Performed: {self.total_updates_performed:,}")
+            print(
+                f"Checkpoint loaded from {path}. Resuming from episode {start_episode}."
+            )
+            print(
+                f"  -> Steps Interacted: {self.total_steps_interacted:,}, Updates Performed: {self.total_updates_performed:,}"
+            )
             return start_episode
         except KeyError as e:
-            print(f"[ERROR] Missing key in checkpoint {path}: {e}. Starting from scratch.")
+            print(
+                f"[ERROR] Missing key in checkpoint {path}: {e}. Starting from scratch."
+            )
             return 0
         except Exception as e:
-            print(f"[ERROR] Failed to load checkpoint from {path}: {e}. Starting from scratch.")
+            print(
+                f"[ERROR] Failed to load checkpoint from {path}: {e}. Starting from scratch."
+            )
             return 0
 
 
@@ -1122,12 +1172,18 @@ def print_map(console: Console, map_tensor: torch.Tensor, title: str = "Generate
         title: The title for the map display.
     """
     original_shape = map_tensor.shape
-    if map_tensor.ndim == 4: map_tensor = map_tensor.squeeze(0).squeeze(0) # (1, 1, H, W) -> (H, W)
-    elif map_tensor.ndim == 3 and map_tensor.shape[0] == 1: map_tensor = map_tensor.squeeze(0) # (1, H, W) -> (H, W)
-    elif map_tensor.ndim == 3 and map_tensor.shape[1] == 1: map_tensor = map_tensor[0].squeeze(0) # (N, 1, H, W) -> First map (H, W)
-    elif map_tensor.ndim == 2: pass # Already (H, W)
+    if map_tensor.ndim == 4:
+        map_tensor = map_tensor.squeeze(0).squeeze(0)  # (1, 1, H, W) -> (H, W)
+    elif map_tensor.ndim == 3 and map_tensor.shape[0] == 1:
+        map_tensor = map_tensor.squeeze(0)  # (1, H, W) -> (H, W)
+    elif map_tensor.ndim == 3 and map_tensor.shape[1] == 1:
+        map_tensor = map_tensor[0].squeeze(0)  # (N, 1, H, W) -> First map (H, W)
+    elif map_tensor.ndim == 2:
+        pass  # Already (H, W)
     else:
-        console.print(f"[red]Error: Cannot print map with shape {original_shape}.[/red]")
+        console.print(
+            f"[red]Error: Cannot print map with shape {original_shape}.[/red]"
+        )
         return
 
     if map_tensor.device != torch.device("cpu"):
@@ -1141,18 +1197,33 @@ def print_map(console: Console, map_tensor: torch.Tensor, title: str = "Generate
 
     map_size_x, map_size_y = map_np.shape
     colors = {
-        0: "dim grey50", 1: "white", 6: "bright_green",
-        2: "bright_red", 3: "red", 4: "dark_red", 5: "red3",
+        0: "dim grey50",
+        1: "white",
+        6: "bright_green",
+        2: "bright_red",
+        3: "red",
+        4: "dark_red",
+        5: "red3",
     }
     default_color = "magenta"
     char_width = 2
 
-    table = Table(title=title, show_header=False, show_edge=False, box=None, padding=(0, 0), expand=False)
+    table = Table(
+        title=title,
+        show_header=False,
+        show_edge=False,
+        box=None,
+        padding=(0, 0),
+        expand=False,
+    )
     for _ in range(map_size_y):
         table.add_column(justify="center", width=char_width, style="dim")
 
     for r in range(map_size_x):
-        row_cells = [f"[{colors.get(tile, default_color)}]{tile:>{char_width-1}} [/]" for tile in map_np[r]]
+        row_cells = [
+            f"[{colors.get(tile, default_color)}]{tile:>{char_width-1}} [/]"
+            for tile in map_np[r]
+        ]
         table.add_row(*row_cells)
 
     console.print(table)
@@ -1183,8 +1254,11 @@ class PPOTrainer:
         self.env = BatchedEnvSimulator(config, self.critic_func_to_use)
         self.agent = PPOAgent(config)
         self.memory = PPOMemory(
-            config.num_envs, config.n_steps_per_rollout, config.map_size,
-            config.hero_tensor_size, self.device
+            config.num_envs,
+            config.n_steps_per_rollout,
+            config.map_size,
+            config.hero_tensor_size,
+            self.device,
         )
 
         self.start_episode = 0
@@ -1196,7 +1270,7 @@ class PPOTrainer:
         random.seed(seed)
         np.random.seed(seed)
         torch.manual_seed(seed)
-        if self.device.type == 'cuda':
+        if self.device.type == "cuda":
             torch.cuda.manual_seed(seed)
             torch.cuda.manual_seed_all(seed)
             # Consider setting these for full determinism, but may impact performance
@@ -1216,7 +1290,9 @@ class PPOTrainer:
             handler.close()
 
         self.logger.setLevel(logging.INFO)
-        formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+        formatter = logging.Formatter(
+            "%(asctime)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+        )
         file_handler = logging.FileHandler(log_file_path, mode="a")
         file_handler.setFormatter(formatter)
         self.logger.addHandler(file_handler)
@@ -1224,12 +1300,13 @@ class PPOTrainer:
         self.logger.info(f"--- Logging started for run: {self.config.run_name} ---")
         self.logger.info(f"Config: {self.config}")
 
-
     def _initialize_critic(self) -> Callable:
         """Loads the neural critic if configured, otherwise returns the base critic."""
         if not self.config.use_neural_critic:
             self.logger.info("Using the original symbolic critic function.")
-            self.console.print("Using original symbolic critic ([dim]neural critic disabled[/dim]).")
+            self.console.print(
+                "Using original symbolic critic ([dim]neural critic disabled[/dim])."
+            )
             return self.base_critic_func
 
         ckpt_path = self.config.neural_critic_checkpoint_path
@@ -1240,32 +1317,48 @@ class PPOTrainer:
 
         try:
             if not os.path.exists(ckpt_path):
-                raise FileNotFoundError(f"Neural critic checkpoint not found at: {ckpt_path}")
+                raise FileNotFoundError(
+                    f"Neural critic checkpoint not found at: {ckpt_path}"
+                )
 
             critic_checkpoint = torch.load(ckpt_path, map_location=self.device)
 
-            if not isinstance(critic_checkpoint, dict) or "config" not in critic_checkpoint or "model_state_dict" not in critic_checkpoint:
-                 raise TypeError("Invalid critic checkpoint format. Expected dict with 'config' and 'model_state_dict'.")
+            if (
+                not isinstance(critic_checkpoint, dict)
+                or "config" not in critic_checkpoint
+                or "model_state_dict" not in critic_checkpoint
+            ):
+                raise TypeError(
+                    "Invalid critic checkpoint format. Expected dict with 'config' and 'model_state_dict'."
+                )
 
             critic_config_data = critic_checkpoint["config"]
             if isinstance(critic_config_data, dict):
-                self.logger.warning("Critic config loaded as dict, reconstructing CriticConfig.")
+                self.logger.warning(
+                    "Critic config loaded as dict, reconstructing CriticConfig."
+                )
                 try:
                     critic_config = CriticConfig(**critic_config_data)
                 except Exception as config_e:
                     raise TypeError(f"Failed to reconstruct CriticConfig: {config_e}")
             elif isinstance(critic_config_data, CriticConfig):
-                 critic_config = critic_config_data
+                critic_config = critic_config_data
             else:
-                raise TypeError(f"Unexpected type for critic config in checkpoint: {type(critic_config_data)}")
+                raise TypeError(
+                    f"Unexpected type for critic config in checkpoint: {type(critic_config_data)}"
+                )
 
-            self.logger.info(f"Loaded critic config: MapSize={critic_config.map_size}, Hidden={critic_config.mlp_hidden_sizes}")
+            self.logger.info(
+                f"Loaded critic config: MapSize={critic_config.map_size}, Hidden={critic_config.mlp_hidden_sizes}"
+            )
 
             # Critical Map Size Check
             critic_config.map_size = tuple(critic_config.map_size)
             if critic_config.map_size != self.config.map_size:
-                msg = (f"CRITICAL MAP SIZE MISMATCH! PPO Config: {self.config.map_size}, "
-                       f"Loaded Critic Config: {critic_config.map_size}. Cannot proceed.")
+                msg = (
+                    f"CRITICAL MAP SIZE MISMATCH! PPO Config: {self.config.map_size}, "
+                    f"Loaded Critic Config: {critic_config.map_size}. Cannot proceed."
+                )
                 self.logger.error(msg)
                 self.console.print(f"[bold red]{msg}[/bold red]")
                 raise ValueError(msg)
@@ -1277,53 +1370,82 @@ class PPOTrainer:
                 dropout_prob=critic_config.mlp_dropout_prob,
             ).to(self.device)
 
-            self.neural_critic_model.load_state_dict(critic_checkpoint["model_state_dict"])
+            self.neural_critic_model.load_state_dict(
+                critic_checkpoint["model_state_dict"]
+            )
             self.neural_critic_model.eval()
 
             self.logger.info("Successfully loaded and initialized Neural Critic model.")
 
-            def neural_critic_wrapper(map_tensor: torch.Tensor, hero_tensor: torch.Tensor) -> torch.Tensor:
+            def neural_critic_wrapper(
+                map_tensor: torch.Tensor, hero_tensor: torch.Tensor
+            ) -> torch.Tensor:
                 """Wrapper function for the loaded neural critic MLP."""
                 map_tensor = map_tensor.to(self.device)
-                if map_tensor.dim() == 3: map_tensor = map_tensor.unsqueeze(1) # (N, H, W) -> (N, 1, H, W)
+                if map_tensor.dim() == 3:
+                    map_tensor = map_tensor.unsqueeze(1)  # (N, H, W) -> (N, 1, H, W)
                 map_tensor = map_tensor.float()
 
                 with torch.no_grad():
                     # The MLP critic likely only uses the map
-                    scores = self.neural_critic_model(map_tensor) # Shape (N, 1)
-                return scores.squeeze(-1) # Shape (N,)
+                    scores = self.neural_critic_model(map_tensor)  # Shape (N, 1)
+                return scores.squeeze(-1)  # Shape (N,)
 
-            self.console.print("Neural Critic [bold green]loaded and active[/bold green].")
+            self.console.print(
+                "Neural Critic [bold green]loaded and active[/bold green]."
+            )
             return neural_critic_wrapper
 
         except Exception as e:
             self.logger.error(f"Failed to load Neural Critic: {e}", exc_info=True)
             self.console.print(f"[bold red]Error loading Neural Critic:[/bold red] {e}")
             self.console.print("Falling back to the original symbolic critic function.")
-            self.neural_critic_model = None # Ensure it's None
+            self.neural_critic_model = None  # Ensure it's None
             return self.base_critic_func
-
 
     def train(self):
         """Runs the main PPO training loop."""
         cfg = self.config
 
-        critic_desc = ("[bold green]Neural Approximator[/]" if cfg.use_neural_critic and hasattr(self, 'neural_critic_model') and self.neural_critic_model
-                       else "[bold blue]Symbolic Critic[/]")
-        if cfg.use_neural_critic and (not hasattr(self, 'neural_critic_model') or not self.neural_critic_model):
-             critic_desc += " ([red]Load Failed![/red])"
+        critic_desc = (
+            "[bold green]Neural Approximator[/]"
+            if cfg.use_neural_critic
+            and hasattr(self, "neural_critic_model")
+            and self.neural_critic_model
+            else "[bold blue]Symbolic Critic[/]"
+        )
+        if cfg.use_neural_critic and (
+            not hasattr(self, "neural_critic_model") or not self.neural_critic_model
+        ):
+            critic_desc += " ([red]Load Failed![/red])"
 
-        self.console.print(Panel.fit(f"Starting PPO Training: mode='{cfg.mode}', run='{cfg.run_name}'\nReward Critic: {critic_desc}", title="Setup", border_style="blue"))
-        self.console.print(f"Device: [cyan]{self.device}[/], Episodes: {cfg.num_episodes:,}, Steps/Episode: {cfg.episode_length}")
-        self.console.print(f"Envs: {cfg.num_envs}, Update Freq (Rollout Steps): [bold yellow]{cfg.n_steps_per_rollout}[/], PPO Epochs: {cfg.num_epochs_per_update}, Minibatch: {cfg.minibatch_size}")
+        self.console.print(
+            Panel.fit(
+                f"Starting PPO Training: mode='{cfg.mode}', run='{cfg.run_name}'\nReward Critic: {critic_desc}",
+                title="Setup",
+                border_style="blue",
+            )
+        )
+        self.console.print(
+            f"Device: [cyan]{self.device}[/], Episodes: {cfg.num_episodes:,}, Steps/Episode: {cfg.episode_length}"
+        )
+        self.console.print(
+            f"Envs: {cfg.num_envs}, Update Freq (Rollout Steps): [bold yellow]{cfg.n_steps_per_rollout}[/], PPO Epochs: {cfg.num_epochs_per_update}, Minibatch: {cfg.minibatch_size}"
+        )
         self.console.print(f"Total Transitions per Update: {cfg.batch_size:,}")
-        self.console.print(f"Checkpoints & Logs Dir: [green]{cfg.checkpoint_dir}[/green]")
+        self.console.print(
+            f"Checkpoints & Logs Dir: [green]{cfg.checkpoint_dir}[/green]"
+        )
         self.logger.info("Training setup complete.")
 
         # Load Agent Checkpoint if exists
-        latest_checkpoint_path = os.path.join(cfg.checkpoint_dir, "latest_checkpoint.pth")
+        latest_checkpoint_path = os.path.join(
+            cfg.checkpoint_dir, "latest_checkpoint.pth"
+        )
         if os.path.exists(latest_checkpoint_path):
-            self.logger.info(f"Loading PPO agent checkpoint from {latest_checkpoint_path}")
+            self.logger.info(
+                f"Loading PPO agent checkpoint from {latest_checkpoint_path}"
+            )
             self.start_episode = self.agent.load_checkpoint(latest_checkpoint_path)
             self.is_first_episode_for_baseline = self.start_episode == 0
             self.logger.info(f"Resuming training from episode {self.start_episode}")
@@ -1333,30 +1455,40 @@ class PPOTrainer:
                 self.logger.warning(msg)
                 return
         else:
-            self.logger.info("No PPO agent checkpoint found. Starting training from scratch.")
+            self.logger.info(
+                "No PPO agent checkpoint found. Starting training from scratch."
+            )
             self.start_episode = 0
 
-
         episode_progress = Progress(
-            SpinnerColumn(), TextColumn("[progress.description]{task.description}"),
-            BarColumn(), TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-            TimeElapsedColumn(), TextColumn("ETA:"), TimeRemainingColumn(),
-            TextColumn("[bold]Metrics:[/]{task.fields[metrics]}", justify="left", style="white"),
-            console=self.console, transient=False,
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+            TimeElapsedColumn(),
+            TextColumn("ETA:"),
+            TimeRemainingColumn(),
+            TextColumn(
+                "[bold]Metrics:[/]{task.fields[metrics]}", justify="left", style="white"
+            ),
+            console=self.console,
+            transient=False,
         )
 
-        map_obs, hero_obs = None, None # Initialized in first env.reset()
+        map_obs, hero_obs = None, None  # Initialized in first env.reset()
 
         with episode_progress:
             episode_task = episode_progress.add_task(
-                "[cyan]Training Episodes", total=cfg.num_episodes,
-                completed=self.start_episode, metrics=" Starting..."
+                "[cyan]Training Episodes",
+                total=cfg.num_episodes,
+                completed=self.start_episode,
+                metrics=" Starting...",
             )
 
             for episode in range(self.start_episode, cfg.num_episodes):
-                if map_obs is None: # First episode or after resuming
-                     map_obs, hero_obs, initial_maps_cpu = self.env.reset()
-                else: # Subsequent episodes, state carries over if envs aren't reset per ep
+                if map_obs is None:  # First episode or after resuming
+                    map_obs, hero_obs, initial_maps_cpu = self.env.reset()
+                else:  # Subsequent episodes, state carries over if envs aren't reset per ep
                     # Standard PPO with fixed rollouts doesn't reset envs every episode,
                     # but here the outer loop *is* episodes. We reset each episode.
                     map_obs, hero_obs, initial_maps_cpu = self.env.reset()
@@ -1364,33 +1496,64 @@ class PPOTrainer:
                 episode_rewards = []
                 steps_this_episode = 0
                 last_update_metrics = {}
-                rollout_step_count = 0 # Steps collected in the current rollout buffer
+                rollout_step_count = 0  # Steps collected in the current rollout buffer
 
-                if episode == self.start_episode or (episode + 1) % cfg.print_maps_freq == 0:
+                if (
+                    episode == self.start_episode
+                    or (episode + 1) % cfg.print_maps_freq == 0
+                ):
                     num_maps_to_print = min(3, cfg.num_envs)
-                    episode_progress.console.print(Panel(f"--- Episode {episode + 1}: Initial Maps (First {num_maps_to_print}) ---", expand=False, border_style="dim"))
+                    episode_progress.console.print(
+                        Panel(
+                            f"--- Episode {episode + 1}: Initial Maps (First {num_maps_to_print}) ---",
+                            expand=False,
+                            border_style="dim",
+                        )
+                    )
                     for i in range(num_maps_to_print):
-                        print_map(episode_progress.console, initial_maps_cpu[i], title=f"Ep {episode + 1} Initial (Env {i})")
+                        print_map(
+                            episode_progress.console,
+                            initial_maps_cpu[i],
+                            title=f"Ep {episode + 1} Initial (Env {i})",
+                        )
 
                 step_task_desc = f"Ep {episode + 1}/{cfg.num_episodes} Steps"
-                step_task = episode_progress.add_task(step_task_desc, total=cfg.episode_length, visible=True, metrics="") # Initialize metrics
+                step_task = episode_progress.add_task(
+                    step_task_desc, total=cfg.episode_length, visible=True, metrics=""
+                )  # Initialize metrics
 
                 while steps_this_episode < cfg.episode_length:
                     # Select action
-                    action, log_prob, value = self.agent.select_action(map_obs, hero_obs, cfg.temperature)
+                    action, log_prob, value = self.agent.select_action(
+                        map_obs, hero_obs, cfg.temperature
+                    )
 
                     # Step environment
-                    next_obs_tuple, reward, done, _ = self.env.step(action) # Ignore info
+                    next_obs_tuple, reward, done, _ = self.env.step(
+                        action
+                    )  # Ignore info
                     next_map_obs, next_hero_obs = next_obs_tuple
 
                     # Store transition
                     # Need map_obs before unsqueeze for memory if network adds channel dim
-                    map_obs_for_memory = map_obs # Should already be (N, 1, H, W) from _get_observation
-                    self.memory.add(map_obs_for_memory, hero_obs, action, log_prob, reward, done, value)
+                    map_obs_for_memory = (
+                        map_obs  # Should already be (N, 1, H, W) from _get_observation
+                    )
+                    self.memory.add(
+                        map_obs_for_memory,
+                        hero_obs,
+                        action,
+                        log_prob,
+                        reward,
+                        done,
+                        value,
+                    )
 
                     # Update state
                     map_obs, hero_obs = next_map_obs, next_hero_obs
-                    episode_rewards.append(reward.mean().item()) # Track average reward across envs
+                    episode_rewards.append(
+                        reward.mean().item()
+                    )  # Track average reward across envs
 
                     # Increment counters
                     self.agent.total_steps_interacted += cfg.num_envs
@@ -1398,14 +1561,22 @@ class PPOTrainer:
                     rollout_step_count += 1
 
                     # Update step progress bar
-                    episode_progress.update(step_task, advance=1, description=f"{step_task_desc} ({rollout_step_count}/{cfg.n_steps_per_rollout} rollout)")
+                    episode_progress.update(
+                        step_task,
+                        advance=1,
+                        description=f"{step_task_desc} ({rollout_step_count}/{cfg.n_steps_per_rollout} rollout)",
+                    )
 
                     # Check if rollout buffer is full
                     if rollout_step_count == cfg.n_steps_per_rollout:
                         # Compute GAE and returns for the completed rollout
                         with torch.no_grad():
-                            last_value = self.agent.critic(map_obs, hero_obs).squeeze(-1)
-                        self.memory.compute_gae_returns(last_value, cfg.gamma, cfg.gae_lambda)
+                            last_value = self.agent.critic(map_obs, hero_obs).squeeze(
+                                -1
+                            )
+                        self.memory.compute_gae_returns(
+                            last_value, cfg.gamma, cfg.gae_lambda
+                        )
 
                         # Perform PPO update
                         update_metrics = self.agent.update(self.memory)
@@ -1413,20 +1584,25 @@ class PPOTrainer:
 
                         # Log update metrics
                         if update_metrics:
-                             p_loss = update_metrics.get('policy_loss', float('nan'))
-                             v_loss = update_metrics.get('value_loss', float('nan'))
-                             ent = update_metrics.get('entropy', float('nan'))
-                             kl = update_metrics.get('approx_kl', float('nan'))
-                             clip_frac = update_metrics.get('clip_fraction', float('nan'))
-                             self.logger.info(f"Ep: {episode+1}, Update: {self.agent.total_updates_performed}, Step: {self.agent.total_steps_interacted:,}, "
-                                              f"P_Loss: {p_loss:.4f}, V_Loss: {v_loss:.4f}, Entropy: {ent:.4f}, KL: {kl:.4f}, ClipFrac: {clip_frac:.3f}")
+                            p_loss = update_metrics.get("policy_loss", float("nan"))
+                            v_loss = update_metrics.get("value_loss", float("nan"))
+                            ent = update_metrics.get("entropy", float("nan"))
+                            kl = update_metrics.get("approx_kl", float("nan"))
+                            clip_frac = update_metrics.get(
+                                "clip_fraction", float("nan")
+                            )
+                            self.logger.info(
+                                f"Ep: {episode+1}, Update: {self.agent.total_updates_performed}, Step: {self.agent.total_steps_interacted:,}, "
+                                f"P_Loss: {p_loss:.4f}, V_Loss: {v_loss:.4f}, Entropy: {ent:.4f}, KL: {kl:.4f}, ClipFrac: {clip_frac:.3f}"
+                            )
                         else:
-                             self.logger.warning(f"Ep: {episode+1}, Update: {self.agent.total_updates_performed} returned no metrics.")
+                            self.logger.warning(
+                                f"Ep: {episode+1}, Update: {self.agent.total_updates_performed} returned no metrics."
+                            )
 
                         # Clear memory and reset rollout counter
                         self.memory.clear()
                         rollout_step_count = 0
-
 
                 # --- End of Episode ---
                 avg_ep_reward = np.mean(episode_rewards) if episode_rewards else 0.0
@@ -1435,70 +1611,118 @@ class PPOTrainer:
                     self.is_first_episode_for_baseline = False
                 else:
                     alpha = cfg.reward_baseline_alpha
-                    self.reward_baseline = alpha * avg_ep_reward + (1 - alpha) * self.reward_baseline
+                    self.reward_baseline = (
+                        alpha * avg_ep_reward + (1 - alpha) * self.reward_baseline
+                    )
 
-                self.logger.info(f"Ep: {episode + 1}/{cfg.num_episodes} finished. Steps: {steps_this_episode}. AvgReward: {avg_ep_reward:.4f}, "
-                                 f"RewardBaseline(EMA): {self.reward_baseline:.4f}, TotalEnvSteps: {self.agent.total_steps_interacted:,}")
+                self.logger.info(
+                    f"Ep: {episode + 1}/{cfg.num_episodes} finished. Steps: {steps_this_episode}. AvgReward: {avg_ep_reward:.4f}, "
+                    f"RewardBaseline(EMA): {self.reward_baseline:.4f}, TotalEnvSteps: {self.agent.total_steps_interacted:,}"
+                )
 
-                p_loss_str = f"{last_update_metrics.get('policy_loss', float('nan')):>7.3f}"
-                v_loss_str = f"{last_update_metrics.get('value_loss', float('nan')):>7.3f}"
+                p_loss_str = (
+                    f"{last_update_metrics.get('policy_loss', float('nan')):>7.3f}"
+                )
+                v_loss_str = (
+                    f"{last_update_metrics.get('value_loss', float('nan')):>7.3f}"
+                )
                 ent_str = f"{last_update_metrics.get('entropy', float('nan')):>6.3f}"
-                metrics_str = (f"AvgRew:[yellow]{avg_ep_reward:>7.3f}[/]| Baseline:[cyan]{self.reward_baseline:>7.3f}[/]| "
-                               f"P:[red]{p_loss_str}[/]| V:[magenta]{v_loss_str}[/]| E:[blue]{ent_str}[/]")
+                metrics_str = (
+                    f"AvgRew:[yellow]{avg_ep_reward:>7.3f}[/]| Baseline:[cyan]{self.reward_baseline:>7.3f}[/]| "
+                    f"P:[red]{p_loss_str}[/]| V:[magenta]{v_loss_str}[/]| E:[blue]{ent_str}[/]"
+                )
                 episode_progress.update(episode_task, advance=1, metrics=metrics_str)
                 episode_progress.remove_task(step_task)
 
-                if (episode + 1) % cfg.print_maps_freq == 0 or episode == cfg.num_episodes - 1:
+                if (
+                    episode + 1
+                ) % cfg.print_maps_freq == 0 or episode == cfg.num_episodes - 1:
                     num_maps_to_print = min(3, cfg.num_envs)
                     final_maps_cpu = self.env.maps.detach().cpu()
-                    episode_progress.console.print(Panel(f"--- Episode {episode + 1}: Final Maps (First {num_maps_to_print}) ---", expand=False, border_style="dim"))
+                    episode_progress.console.print(
+                        Panel(
+                            f"--- Episode {episode + 1}: Final Maps (First {num_maps_to_print}) ---",
+                            expand=False,
+                            border_style="dim",
+                        )
+                    )
                     for i in range(num_maps_to_print):
-                         print_map(episode_progress.console, final_maps_cpu[i], title=f"Ep {episode + 1} Final (Env {i})")
-
+                        print_map(
+                            episode_progress.console,
+                            final_maps_cpu[i],
+                            title=f"Ep {episode + 1} Final (Env {i})",
+                        )
 
                 # Save Checkpoint Periodically and Latest
                 save_now = (episode + 1) % cfg.save_checkpoint_freq == 0
-                if save_now or episode == cfg.num_episodes - 1: # Save on last episode too
-                    latest_path = os.path.join(cfg.checkpoint_dir, "latest_checkpoint.pth")
+                if (
+                    save_now or episode == cfg.num_episodes - 1
+                ):  # Save on last episode too
+                    latest_path = os.path.join(
+                        cfg.checkpoint_dir, "latest_checkpoint.pth"
+                    )
                     self.agent.save_checkpoint(latest_path, episode)
-                    self.logger.info(f"Latest checkpoint updated to {latest_path} after episode {episode + 1}")
+                    self.logger.info(
+                        f"Latest checkpoint updated to {latest_path} after episode {episode + 1}"
+                    )
 
-                    if save_now and episode < cfg.num_episodes - 1 : # Avoid duplicate save on last episode if freq aligns
-                        chk_path = os.path.join(cfg.checkpoint_dir, f"checkpoint_ep_{episode + 1}.pth")
+                    if (
+                        save_now and episode < cfg.num_episodes - 1
+                    ):  # Avoid duplicate save on last episode if freq aligns
+                        chk_path = os.path.join(
+                            cfg.checkpoint_dir, f"checkpoint_ep_{episode + 1}.pth"
+                        )
                         self.agent.save_checkpoint(chk_path, episode)
                         self.logger.info(f"Periodic checkpoint saved to {chk_path}")
 
         # --- End of Training ---
-        msg = (f"Training finished after {cfg.num_episodes} episodes ({self.agent.total_steps_interacted:,} total env steps, "
-               f"{self.agent.total_updates_performed:,} PPO updates).")
+        msg = (
+            f"Training finished after {cfg.num_episodes} episodes ({self.agent.total_steps_interacted:,} total env steps, "
+            f"{self.agent.total_updates_performed:,} PPO updates)."
+        )
         self.console.print(Panel(msg, title="Complete", border_style="green"))
         self.logger.info(msg)
 
         # Save final state labeled explicitly
         final_chk_path = os.path.join(cfg.checkpoint_dir, "final_checkpoint.pth")
         self.agent.save_checkpoint(final_chk_path, cfg.num_episodes - 1)
-        self.console.print(f"Final checkpoint saved to: [green]{final_chk_path}[/green]")
+        self.console.print(
+            f"Final checkpoint saved to: [green]{final_chk_path}[/green]"
+        )
         self.logger.info(f"Final checkpoint saved to {final_chk_path}")
 
         # Ensure latest points to the final one
         latest_path = os.path.join(cfg.checkpoint_dir, "latest_checkpoint.pth")
         if os.path.exists(final_chk_path):
             try:
-                if os.path.exists(latest_path): os.remove(latest_path)
+                if os.path.exists(latest_path):
+                    os.remove(latest_path)
                 shutil.copyfile(final_chk_path, latest_path)
-                self.logger.info(f"Latest checkpoint ensured to point to final state: {latest_path}")
+                self.logger.info(
+                    f"Latest checkpoint ensured to point to final state: {latest_path}"
+                )
             except Exception as link_e:
-                self.logger.error(f"Failed to update latest checkpoint link/copy: {link_e}")
+                self.logger.error(
+                    f"Failed to update latest checkpoint link/copy: {link_e}"
+                )
 
 
 # --- Main Execution ---
 if __name__ == "__main__":
     script_dir = os.path.dirname(__file__)
-    default_config_path = os.path.join(script_dir, "ppo_episodic_config.yaml") # Assumes config is sibling to script
+    default_config_path = os.path.join(
+        script_dir, "ppo_episodic_config.yaml"
+    )  # Assumes config is sibling to script
 
-    parser = argparse.ArgumentParser(description="Train PPO Agent with Optional Neural Critic")
-    parser.add_argument("--config", type=str, default=default_config_path,
-                        help=f"Path to PPO config YAML file (default: {default_config_path})")
+    parser = argparse.ArgumentParser(
+        description="Train PPO Agent with Optional Neural Critic"
+    )
+    parser.add_argument(
+        "--config",
+        type=str,
+        default=default_config_path,
+        help=f"Path to PPO config YAML file (default: {default_config_path})",
+    )
     args = parser.parse_args()
     config_path = args.config
 
@@ -1506,7 +1730,9 @@ if __name__ == "__main__":
         print(f"Loading PPO configuration from {config_path}")
         ppo_config = configure_from_yaml(config_path)
     else:
-        print(f"Config file '{config_path}' not found. Using default PPOConfig settings.")
+        print(
+            f"Config file '{config_path}' not found. Using default PPOConfig settings."
+        )
         ppo_config = PPOConfig()
 
     # Use the imported symbolic critic as the base/fallback
@@ -1522,41 +1748,57 @@ if __name__ == "__main__":
         trainer.logger.warning(msg)
         last_completed_episode = -1
         # Try to get last saved episode from latest checkpoint
-        latest_checkpoint_path = os.path.join(trainer.config.checkpoint_dir, "latest_checkpoint.pth")
+        latest_checkpoint_path = os.path.join(
+            trainer.config.checkpoint_dir, "latest_checkpoint.pth"
+        )
         if os.path.exists(latest_checkpoint_path):
-             try:
-                 checkpoint = torch.load(latest_checkpoint_path, map_location="cpu")
-                 last_completed_episode = checkpoint.get("episode", -1)
-             except Exception as e:
-                 trainer.logger.error(f"Could not read episode from latest checkpoint on interrupt: {e}")
+            try:
+                checkpoint = torch.load(latest_checkpoint_path, map_location="cpu")
+                last_completed_episode = checkpoint.get("episode", -1)
+            except Exception as e:
+                trainer.logger.error(
+                    f"Could not read episode from latest checkpoint on interrupt: {e}"
+                )
 
         # Save current state as interrupted
-        interrupted_chk_path = os.path.join(trainer.config.checkpoint_dir, "final_checkpoint_interrupted.pth")
-        if hasattr(trainer, 'agent'):
+        interrupted_chk_path = os.path.join(
+            trainer.config.checkpoint_dir, "final_checkpoint_interrupted.pth"
+        )
+        if hasattr(trainer, "agent"):
             trainer.agent.save_checkpoint(interrupted_chk_path, last_completed_episode)
             final_msg = f"Interrupted state checkpoint saved to {interrupted_chk_path} (based on last completed ep {last_completed_episode})"
             print(final_msg)
             trainer.logger.info(final_msg)
         else:
-             print("Agent not fully initialized, cannot save interrupt checkpoint.")
+            print("Agent not fully initialized, cannot save interrupt checkpoint.")
 
     except Exception as e:
-        trainer.console.print("\n[bold red]An critical error occurred during training:[/bold red]")
+        trainer.console.print(
+            "\n[bold red]An critical error occurred during training:[/bold red]"
+        )
         trainer.console.print_exception(show_locals=False)
-        trainer.logger.error("A critical error occurred during training.", exc_info=True)
+        trainer.logger.error(
+            "A critical error occurred during training.", exc_info=True
+        )
 
         print("[bold red]Attempting to save error state checkpoint...[/bold red]")
         last_completed_episode = -1
-        latest_checkpoint_path = os.path.join(trainer.config.checkpoint_dir, "latest_checkpoint.pth")
+        latest_checkpoint_path = os.path.join(
+            trainer.config.checkpoint_dir, "latest_checkpoint.pth"
+        )
         if os.path.exists(latest_checkpoint_path):
-             try:
-                 checkpoint = torch.load(latest_checkpoint_path, map_location="cpu")
-                 last_completed_episode = checkpoint.get("episode", -1)
-             except Exception as load_e:
-                 trainer.logger.error(f"Could not read episode from latest checkpoint during error handling: {load_e}")
+            try:
+                checkpoint = torch.load(latest_checkpoint_path, map_location="cpu")
+                last_completed_episode = checkpoint.get("episode", -1)
+            except Exception as load_e:
+                trainer.logger.error(
+                    f"Could not read episode from latest checkpoint during error handling: {load_e}"
+                )
 
-        error_chk_path = os.path.join(trainer.config.checkpoint_dir, "final_checkpoint_error.pth")
-        if hasattr(trainer, 'agent'):
+        error_chk_path = os.path.join(
+            trainer.config.checkpoint_dir, "final_checkpoint_error.pth"
+        )
+        if hasattr(trainer, "agent"):
             trainer.agent.save_checkpoint(error_chk_path, last_completed_episode)
             error_msg = f"Error state checkpoint saved to {error_chk_path} (based on last completed ep {last_completed_episode})"
             print(error_msg)

@@ -27,9 +27,7 @@ from rich.text import Text
 
 from daedalus.critics.level_criticv4 import level_critic as actual_critic
 
-INITIAL_CHECKPOINT_PATH = (
-    "neural_critic_checkpoints/critic_MLP_20250422_113333/latest_checkpoint.pth" # make this "" when running from start
-)
+INITIAL_CHECKPOINT_PATH = "neural_critic_checkpoints/critic_MLP_20250422_113333/latest_checkpoint.pth"  # make this "" when running from start
 
 
 class CriticApproximatorMLP(nn.Module):
@@ -327,7 +325,9 @@ class NeuralCriticTrainer:
             try:
                 # Load checkpoint allowing arbitrary objects (like CriticConfig)
                 # Only do this if the checkpoint source is trusted.
-                checkpoint = torch.load(path, map_location=self.device, weights_only=False)
+                checkpoint = torch.load(
+                    path, map_location=self.device, weights_only=False
+                )
                 if "model_state_dict" in checkpoint:
                     # Ensure model state matches before loading
                     self.model.load_state_dict(checkpoint["model_state_dict"])
@@ -542,7 +542,9 @@ class NeuralCriticTrainer:
                         expand=False,
                     )
                 )
-                indices = random.sample(range(last_batch_maps_cpu.shape[0]), num_examples)
+                indices = random.sample(
+                    range(last_batch_maps_cpu.shape[0]), num_examples
+                )
                 for i, idx in enumerate(indices):
                     map_to_print = last_batch_maps_cpu[idx]
                     true_score = last_batch_true_scores[idx].item()
@@ -640,7 +642,9 @@ class NeuralCriticTrainer:
                     if not np.isnan(last_logged_val_mse)
                     else "----    "
                 )
-                metrics_str = f" Train MSE:[red]{train_mse:>8.4f}[/]| Val MSE:{val_mse_str:>8}"
+                metrics_str = (
+                    f" Train MSE:[red]{train_mse:>8.4f}[/]| Val MSE:{val_mse_str:>8}"
+                )
 
                 if self.total_steps_trained % cfg.validation_freq == 0:
                     val_mse = self._validate()
@@ -657,7 +661,9 @@ class NeuralCriticTrainer:
                 progress.update(task, advance=1, metrics=metrics_str)
 
                 is_epoch_end = self.total_steps_trained % cfg.steps_per_epoch == 0
-                if is_epoch_end and self.total_steps_trained > 0: # Avoid saving at step 0 if epoch size matches steps
+                if (
+                    is_epoch_end and self.total_steps_trained > 0
+                ):  # Avoid saving at step 0 if epoch size matches steps
                     completed_epoch_index = current_epoch
                     if (
                         completed_epoch_index + 1
@@ -674,7 +680,7 @@ class NeuralCriticTrainer:
         )
         final_epoch_index = cfg.num_epochs - 1
         if (final_epoch_index + 1) % cfg.save_checkpoint_freq_epochs != 0:
-             self._save_checkpoint(final_epoch_index)
+            self._save_checkpoint(final_epoch_index)
         self._save_checkpoint(final_epoch_index, is_latest=True)
 
 
@@ -746,7 +752,9 @@ if __name__ == "__main__":
 
         if os.path.exists(latest_checkpoint_path):
             # Use weights_only=False here too if the saved checkpoint includes the config
-            checkpoint = torch.load(latest_checkpoint_path, map_location=test_device, weights_only=False)
+            checkpoint = torch.load(
+                latest_checkpoint_path, map_location=test_device, weights_only=False
+            )
             test_model.load_state_dict(checkpoint["model_state_dict"])
             test_model.eval()
             console.print(

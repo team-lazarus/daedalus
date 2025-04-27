@@ -289,7 +289,9 @@ class PPOConfig:
     # --- Neural Critic Integration ---
     use_neural_critic: bool = True  # <<< Enable/disable neural critic
     # <<< Path relative to the base directory (where you run the script)
-    neural_critic_checkpoint_path: str = "critics/neural_critic_checkpoints/critic_MLP_20250422_113333/latest_checkpoint.pth"
+    neural_critic_checkpoint_path: str = (
+        "critics/neural_critic_checkpoints/critic_MLP_20250422_113333/latest_checkpoint.pth"
+    )
 
     # Calculated properties
     batch_size: int = field(init=False)
@@ -1279,7 +1281,9 @@ class PPOTrainer:
                 map_obs, hero_obs, initial_maps_cpu = self.env.reset()
                 episode_rewards = []
                 steps_this_episode = 0
-                last_update_metrics = {}  # Store metrics from the last update in the episode
+                last_update_metrics = (
+                    {}
+                )  # Store metrics from the last update in the episode
 
                 # --- Print Initial Maps ---
                 if (
@@ -1653,12 +1657,14 @@ if __name__ == "__main__":
             )  # Should be (batch_size, 1)
 
             # Basic shape assertions
-            assert action_logits.shape == (batch_size, current_config.action_dim), (
-                f"Actor output shape mismatch: {action_logits.shape}"
-            )
-            assert state_values.shape == (batch_size, 1), (
-                f"Critic output shape mismatch: {state_values.shape}"
-            )
+            assert action_logits.shape == (
+                batch_size,
+                current_config.action_dim,
+            ), f"Actor output shape mismatch: {action_logits.shape}"
+            assert state_values.shape == (
+                batch_size,
+                1,
+            ), f"Critic output shape mismatch: {state_values.shape}"
 
             console.print("[green]Network forward pass test successful.[/green]")
         else:

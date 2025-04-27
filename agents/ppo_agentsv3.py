@@ -74,6 +74,8 @@ except ImportError as e:
 
     def original_level_critic(*args, **kwargs):
         raise NotImplementedError("Original critic import failed")
+
+
 # ----------------------------------------
 
 
