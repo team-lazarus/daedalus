@@ -817,11 +817,10 @@ class PPOTrainer:
 
                     ep_policy_losses, ep_value_losses, ep_entropies = [], [], []
 
-                    if episode == start_episode:  # Visualize initial maps only once
-                        self.visualize_maps(
-                            getattr(self.env, "maps", None),
-                            f"Initial Maps (Start of Training)",
-                        )
+                    self.visualize_maps(
+                        getattr(self.env, "maps", None),
+                        f"Initial Maps (Start of Training)",
+                    )
 
                     # --- Rollout Phase ---
                     self.logger.debug(f"Starting Episode {episode}")
