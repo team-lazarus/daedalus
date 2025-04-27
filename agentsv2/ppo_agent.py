@@ -345,11 +345,11 @@ class PPOTrainer:
 
         color_map = {
             0: "[black] [/black]",  # Empty/Wall
-            1: "[white]#[/white]",  # Path
-            2: "[red]E[/red]",  # Enemy
-            3: "[red]e[/red]",  # Damaged Enemy?
+            1: "[white]█[/white]",  # Path
+            2: "[red]X[/red]",  # Enemy
+            3: "[red]X[/red]",  # Damaged Enemy?
             4: "[red]X[/red]",  # Dead Enemy?
-            5: "[yellow]P[/yellow]",  # Player (if present)
+            5: "[red]X[/red]",  # Player (if present)
             6: "[green]D[/green]",  # Door
         }
 
