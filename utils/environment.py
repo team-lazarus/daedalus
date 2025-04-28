@@ -191,24 +191,27 @@ class DaedalusEnvironment:
         Returns:
             Initial observation tensor of shape (batch_size, obs_dim).
         """
-        
-
         # Re-initialize all state tensors
         self._initialize_state()
 
         # Apply procedural generation and set initial positions for each environment
         samples = random.sample(self.bootstrapped_maps, self.batch_size)
-        self.maps = []
-        self.current_positions = []
-        for row, col, map_data in samples:
-            self.maps.append(map_data)
-            self.current_positions.append([row, col])
         
-        self.maps = torch.from_numpy(np.array(self.maps, dtype=np.int64))
-        self.current_positions = torch.from_numpy(np.array(self.current_positions, dtype=np.int64))
-        self.maps = self.maps.to(device=self.device)
-        self.current_positions = self.current_positions.to(device=self.device)
-
+        # Create lists to hold the map and position data
+        maps_list = []
+        positions_list = []
+        
+        for row, col, map_data in samples:
+            # Check if map_data is already a tensor and move to CPU if needed
+            if isinstance(map_data, torch.Tensor):
+                map_data = map_data.cpu().numpy()
+            maps_list.append(map_data)
+            positions_list.append([row, col])
+        
+        # Convert lists to NumPy arrays, then to tensors, and finally move to the device
+        self.maps = torch.tensor(np.array(maps_list, dtype=np.int64), device=self.device)
+        self.current_positions = torch.tensor(np.array(positions_list, dtype=np.int64), device=self.device)
+        
         # Create and return the initial observations
         initial_observations = self._create_observations()
         print("RESET")

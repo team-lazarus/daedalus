@@ -134,7 +134,7 @@ class PPOTrainer:
             learning_rate
         )
 
-        self.rollout_buffer = deque(maxlen=self.update_interval)
+        self.rollout_buffer = deque(maxlen=self.update_interval*self.env_batch_size)
         self._initialize_metrics()
 
         self.console = Console()
@@ -649,6 +649,7 @@ class PPOTrainer:
             advantages, returns = self.calculate_gae(
                 rewards, values, next_values, dones
             )
+
         except Exception as e:
             self.logger.exception(f"Error calculating GAE/Returns: {e}")
             self.rollout_buffer.clear()
@@ -662,6 +663,7 @@ class PPOTrainer:
             old_log_probs = old_log_probs.view(num_samples)
             advantages = advantages.view(num_samples)
             returns = returns.view(num_samples)
+            returns = (returns - returns.mean()) / (returns.std() + NUMERICAL_STABILITY_EPS)
             advantages = (advantages - advantages.mean()) / (
                 advantages.std() + NUMERICAL_STABILITY_EPS
             )
@@ -1037,7 +1039,7 @@ if __name__ == "__main__":
         batch_size=8192//64,
         learning_rate=3e-4,
         gamma=0.99,
-        gae_lambda=0.95,
+        gae_lambda=0.85,
         clip_epsilon=0.2,
         critic_coef=0.5,
         entropy_coef=0.01,
@@ -1049,7 +1051,7 @@ if __name__ == "__main__":
         critic_path="latest_checkpoint.pth",  # "latest_checkpoint.pth" # Set path if needed
         map_size=(12, 12),
         steps_per_episode=256,  # Total steps collected across envs per episode
-        update_interval=128,  # Perform PPO update every 128 steps
+        update_interval=32,  # Perform PPO update every 128 steps
         num_episodes=50000,
         mini_batch_factor=4,
         log_level=logging.INFO,  # Change to logging.DEBUG for more detail
