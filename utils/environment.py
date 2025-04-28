@@ -25,44 +25,45 @@ from daedalus.critics.critic_approximator import CriticApproximatorMLP
 
 console = Console()
 
-def visualize_maps(map, x=0, y=0, title: str ="- Map 0 -") -> None:
-        """Visualize maps using rich."""
 
-        color_map = {
-            0: "[grey27]0[/grey27]",  # Empty/Wall
-            1: "[white]1[/white]",  # Path
-            2: "[red]2[/red]",  # Enemy
-            3: "[red]3[/red]",  # Damaged Enemy?
-            4: "[red]4[/red]",  # Dead Enemy?
-            5: "[red]5[/red]",  # Player (if present)
-            6: "[green]6[/green]",  # Door
-        }
+def visualize_maps(map, x=0, y=0, title: str = "- Map 0 -") -> None:
+    """Visualize maps using rich."""
 
-        console.print(f"\n{title}")
+    color_map = {
+        0: "[grey27]0[/grey27]",  # Empty/Wall
+        1: "[white]1[/white]",  # Path
+        2: "[red]2[/red]",  # Enemy
+        3: "[red]3[/red]",  # Damaged Enemy?
+        4: "[red]4[/red]",  # Dead Enemy?
+        5: "[red]5[/red]",  # Player (if present)
+        6: "[green]6[/green]",  # Door
+    }
 
-        table = Table(
-            title=title,
-            show_header=False,
-            show_lines=False,
-            box=None,
-            padding=0,
-        )
+    console.print(f"\n{title}")
 
-        map_height, map_width = map.shape[0], map.shape[1]
-        for _ in range(map_width):
-            table.add_column()  # No header text needed
+    table = Table(
+        title=title,
+        show_header=False,
+        show_lines=False,
+        box=None,
+        padding=0,
+    )
 
-        for j in range(map_height):
-            row = []
-            for k in range(map_width):
-                cell_value = int(map[j, k].item())
-                if j == x and k == y:
-                    row.append(f"[yellow]{cell_value}[/yellow]")
-                row.append(color_map.get(cell_value, f"[cyan]{cell_value}[/cyan]"))
-            table.add_row(*row)
+    map_height, map_width = map.shape[0], map.shape[1]
+    for _ in range(map_width):
+        table.add_column()  # No header text needed
 
-        console.print(table)
-        rprint("")  # Use rich print for spacing
+    for j in range(map_height):
+        row = []
+        for k in range(map_width):
+            cell_value = int(map[j, k].item())
+            if j == x and k == y:
+                row.append(f"[yellow]{cell_value}[/yellow]")
+            row.append(color_map.get(cell_value, f"[cyan]{cell_value}[/cyan]"))
+        table.add_row(*row)
+
+    console.print(table)
+    rprint("")  # Use rich print for spacing
 
 
 class DaedalusEnvironment:
@@ -138,7 +139,7 @@ class DaedalusEnvironment:
         # Initialize state variables on the first reset
         self._generate_maps()
         self._initialize_state()
-    
+
     def _generate_maps(self, seed: Optional[int] = None):
         self.bootstrapped_maps = []
         if seed is not None:
@@ -150,8 +151,10 @@ class DaedalusEnvironment:
             if self.device.type == "cuda":
                 torch.cuda.manual_seed(seed)
 
-        console.print("[bold][cyan]= Initializing a massive batch of maps =[/cyan][/bold]")
-        for i in tqdm(range(self.batch_size*128)):
+        console.print(
+            "[bold][cyan]= Initializing a massive batch of maps =[/cyan][/bold]"
+        )
+        for i in tqdm(range(self.batch_size * 128)):
             # Randomly choose a generation algorithm
             map_data = self._apply_random_walk(i)
 
@@ -160,9 +163,6 @@ class DaedalusEnvironment:
             start_col = random.randint(0, self.map_size[1] - 1)
 
             self.bootstrapped_maps.append((start_row, start_col, map_data))
-
-
-
 
     def _initialize_state(self):
         """Initializes or resets the core state tensors."""
@@ -196,22 +196,26 @@ class DaedalusEnvironment:
 
         # Apply procedural generation and set initial positions for each environment
         samples = random.sample(self.bootstrapped_maps, self.batch_size)
-        
+
         # Create lists to hold the map and position data
         maps_list = []
         positions_list = []
-        
+
         for row, col, map_data in samples:
             # Check if map_data is already a tensor and move to CPU if needed
             if isinstance(map_data, torch.Tensor):
                 map_data = map_data.cpu().numpy()
             maps_list.append(map_data)
             positions_list.append([row, col])
-        
+
         # Convert lists to NumPy arrays, then to tensors, and finally move to the device
-        self.maps = torch.tensor(np.array(maps_list, dtype=np.int64), device=self.device)
-        self.current_positions = torch.tensor(np.array(positions_list, dtype=np.int64), device=self.device)
-        
+        self.maps = torch.tensor(
+            np.array(maps_list, dtype=np.int64), device=self.device
+        )
+        self.current_positions = torch.tensor(
+            np.array(positions_list, dtype=np.int64), device=self.device
+        )
+
         # Create and return the initial observations
         initial_observations = self._create_observations()
         print("RESET")
@@ -260,45 +264,47 @@ class DaedalusEnvironment:
             # device is already defined
 
             # 1) pull out NumPy buffers
-            maps_np = self.maps.cpu().detach().numpy()               # shape (B, H, W)
-            pos_np  = self.current_positions.cpu().detach().numpy()  # shape (B, 2)
-            acts_np = actions                 # shape (B,)
+            maps_np = self.maps.cpu().detach().numpy()  # shape (B, H, W)
+            pos_np = self.current_positions.cpu().detach().numpy()  # shape (B, 2)
+            acts_np = actions  # shape (B,)
 
             B, H, W = maps_np.shape
 
             # 2) modification (painting) actions
-            mod_mask   = acts_np < c.MODIFICATION_ACTIONS           # shape (B,)
-            batch_idx  = np.nonzero(mod_mask)[0]                    # e.g. [0,3,5,12,…]
-            pos_mod    = pos_np[mod_mask]                           # shape (M,2)
-            maps_np[batch_idx, pos_mod[:,0], pos_mod[:,1]] = acts_np[mod_mask]
+            mod_mask = acts_np < c.MODIFICATION_ACTIONS  # shape (B,)
+            batch_idx = np.nonzero(mod_mask)[0]  # e.g. [0,3,5,12,…]
+            pos_mod = pos_np[mod_mask]  # shape (M,2)
+            maps_np[batch_idx, pos_mod[:, 0], pos_mod[:, 1]] = acts_np[mod_mask]
 
             # 3) movement actions
-            move_mask  = ~mod_mask                                 # or acts_np >= c.MODIFICATION_ACTIONS
-            rows, cols = pos_np[:,0].copy(), pos_np[:,1].copy()    # make sure we’re not overwriting pos_np too early
+            move_mask = ~mod_mask  # or acts_np >= c.MODIFICATION_ACTIONS
+            rows, cols = (
+                pos_np[:, 0].copy(),
+                pos_np[:, 1].copy(),
+            )  # make sure we’re not overwriting pos_np too early
 
             # action codes → vector masks
-            up    =  acts_np == (c.MODIFICATION_ACTIONS + 0)   # e.g. 7
-            left  =  acts_np == (c.MODIFICATION_ACTIONS + 1)   # e.g. 8
-            down  =  acts_np == (c.MODIFICATION_ACTIONS + 2)   # e.g. 9
-            right =  acts_np == (c.MODIFICATION_ACTIONS + 3)   # e.g. 10
+            up = acts_np == (c.MODIFICATION_ACTIONS + 0)  # e.g. 7
+            left = acts_np == (c.MODIFICATION_ACTIONS + 1)  # e.g. 8
+            down = acts_np == (c.MODIFICATION_ACTIONS + 2)  # e.g. 9
+            right = acts_np == (c.MODIFICATION_ACTIONS + 3)  # e.g. 10
 
             # clamp into valid range [0 … H-1] or [0 … W-1]
-            rows[up]    = np.maximum(0,            rows[up]    - 1)
-            rows[down]  = np.minimum(H - 1,        rows[down]  + 1)
-            cols[left]  = np.maximum(0,            cols[left]  - 1)
-            cols[right] = np.minimum(W - 1,        cols[right] + 1)
+            rows[up] = np.maximum(0, rows[up] - 1)
+            rows[down] = np.minimum(H - 1, rows[down] + 1)
+            cols[left] = np.maximum(0, cols[left] - 1)
+            cols[right] = np.minimum(W - 1, cols[right] + 1)
 
             # write back
-            pos_np[:,0], pos_np[:,1] = rows, cols
+            pos_np[:, 0], pos_np[:, 1] = rows, cols
 
             # 4) push back into torch
             self.maps = torch.from_numpy(maps_np).to(device=self.device)
             self.current_positions = torch.from_numpy(pos_np).to(device=self.device)
 
             # 5) (optional) re-visualize
-            #visualize_maps(self.maps[0])
+            # visualize_maps(self.maps[0])
 
-            
         else:
             raise NotImplementedError(f"{self.mode} has currently not been implemented")
 
@@ -444,7 +450,7 @@ class DaedalusEnvironment:
             device=self.device,
         )
 
-        steps = random.randint(32, 128)
+        steps = random.randint(96, 128)
         row, col = random.randint(0, self.map_size[0] - 1), random.randint(
             0, self.map_size[1] - 1
         )
@@ -452,25 +458,25 @@ class DaedalusEnvironment:
         for _ in range(steps):
             # Place a tile
             tile_choice = random.random()
-            if tile_choice < 0.8:  # 80% empty
+            if tile_choice < 0.90:  # 80% empty # 90% removing doors
                 tile_type = c.TILE_EMPTY
-            elif tile_choice < 0.84:  # 4% door
-                tile_type = c.TILE_DOOR
-            else:  # 16% enemy
-                tile_type = random.choice(c.ENEMY_TILES)
+            # elif tile_choice < 0.84:  # 4% door
+            #     tile_type = c.TILE_DOOR
+            else:  # 16% enemy # 10% chance
+                tile_type = c.ENEMY_TILES[0]
             pcgrl_map[row, col] = tile_type
 
             # Move randomly
             direction = random.randint(0, 3)  # 0: up, 1: down, 2: left, 3: right
-            if direction == 0 and row > 0:
+            if direction == 0 and row > 1:
                 row -= 1
-            elif direction == 1 and row < self.map_size[0] - 1:
+            elif direction == 1 and row < self.map_size[0] - 2:
                 row += 1
-            elif direction == 2 and col > 0:
+            elif direction == 2 and col > 1:
                 col -= 1
-            elif direction == 3 and col < self.map_size[1] - 1:
+            elif direction == 3 and col < self.map_size[1] - 2:
                 col += 1
-        
+
         return pcgrl_map
 
     def _apply_connected_squares(self, batch_idx: int):

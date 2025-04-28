@@ -134,7 +134,7 @@ class PPOTrainer:
             learning_rate
         )
 
-        self.rollout_buffer = deque(maxlen=self.update_interval*self.env_batch_size)
+        self.rollout_buffer = deque(maxlen=self.update_interval * self.env_batch_size)
         self._initialize_metrics()
 
         self.console = Console()
@@ -580,7 +580,7 @@ class PPOTrainer:
         values = values.to(self.device)
         next_values = next_values.to(self.device)
         dones = dones.to(self.device)
-        
+
         num_steps = rewards.shape[0]
         advantages = torch.zeros_like(rewards, device=self.device)
         last_gae_lam = 0.0
@@ -626,12 +626,24 @@ class PPOTrainer:
 
         # 1. Prepare Data from Buffer
         try:
-            observations = torch.stack([step.observation for step in self.rollout_buffer]).to(self.device)
-            actions = torch.stack([step.action for step in self.rollout_buffer]).to(self.device)
-            old_log_probs = torch.stack([step.log_prob for step in self.rollout_buffer]).to(self.device)
-            values = torch.stack([step.value for step in self.rollout_buffer]).to(self.device)
-            rewards = torch.stack([step.reward for step in self.rollout_buffer]).to(self.device)
-            dones = torch.stack([step.done for step in self.rollout_buffer]).to(self.device)
+            observations = torch.stack(
+                [step.observation for step in self.rollout_buffer]
+            ).to(self.device)
+            actions = torch.stack([step.action for step in self.rollout_buffer]).to(
+                self.device
+            )
+            old_log_probs = torch.stack(
+                [step.log_prob for step in self.rollout_buffer]
+            ).to(self.device)
+            values = torch.stack([step.value for step in self.rollout_buffer]).to(
+                self.device
+            )
+            rewards = torch.stack([step.reward for step in self.rollout_buffer]).to(
+                self.device
+            )
+            dones = torch.stack([step.done for step in self.rollout_buffer]).to(
+                self.device
+            )
         except Exception as e:
             self.logger.exception(f"Error stacking data from rollout buffer: {e}")
             self.rollout_buffer.clear()  # Clear potentially corrupted buffer
@@ -663,7 +675,9 @@ class PPOTrainer:
             old_log_probs = old_log_probs.view(num_samples)
             advantages = advantages.view(num_samples)
             returns = returns.view(num_samples)
-            returns = (returns - returns.mean()) / (returns.std() + NUMERICAL_STABILITY_EPS)
+            returns = (returns - returns.mean()) / (
+                returns.std() + NUMERICAL_STABILITY_EPS
+            )
             advantages = (advantages - advantages.mean()) / (
                 advantages.std() + NUMERICAL_STABILITY_EPS
             )
@@ -807,7 +821,6 @@ class PPOTrainer:
                     v_loss=0.0,  # Initial fields
                 )
 
-
                 for episode in range(start_episode, total_episodes):
                     self.current_observation = self._reset_environment()
                     self.metrics["episode"] = episode
@@ -829,7 +842,7 @@ class PPOTrainer:
                     # --- Rollout Phase ---
                     self.logger.debug(f"Starting Episode {episode}")
                     steps_collected_in_episode = 0
-                    
+
                     while steps_collected_in_episode < self.steps_per_episode:
                         # 1. Select action and get value estimate
                         actions, log_probs, values = self.select_action(
@@ -841,7 +854,7 @@ class PPOTrainer:
                             self._step_environment(actions)
                         )
                         steps_collected_in_episode += 1
-                        if steps_collected_in_episode == self.steps_per_episode-1:
+                        if steps_collected_in_episode == self.steps_per_episode - 1:
                             self.visualize_maps(
                                 getattr(self.env, "maps", None),
                                 f"Final Maps (Episode {episode} End)",
@@ -919,7 +932,6 @@ class PPOTrainer:
                             # Break inner loop if desired, but fixed steps_per_episode is simpler
                             # break
 
-                    
                     # --- End of Episode ---
                     # Calculate and store episode metrics
                     avg_ep_reward = np.mean(episode_rewards_sum)
@@ -1001,7 +1013,6 @@ class PPOTrainer:
                     )
 
                     # Visualize final maps for the episode
-                    
 
                     # Save checkpoint periodically
                     if episode > 0 and episode % checkpoint_interval == 0:
@@ -1036,7 +1047,7 @@ class PPOTrainer:
 if __name__ == "__main__":
     trainer = PPOTrainer(
         env_mode="TURTLE",
-        batch_size=8192//64,
+        batch_size=8192 // 16,
         learning_rate=3e-4,
         gamma=0.99,
         gae_lambda=0.85,
