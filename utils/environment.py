@@ -113,6 +113,7 @@ class DaedalusEnvironment:
         elif self.mode == "TURTLE":
             # Modifications + Movement Actions
             self.action_space = c.MODIFICATION_ACTIONS + len(c.MOVE_ACTION)
+            print(self.action_space)
         elif self.mode == "WIDE":
             # Modification for every cell
             self.action_space = c.MODIFICATION_ACTIONS * map_size[0] * map_size[1]
@@ -303,8 +304,7 @@ class DaedalusEnvironment:
             self.current_positions = torch.from_numpy(pos_np).to(device=self.device)
 
             # 5) (optional) re-visualize
-            # visualize_maps(self.maps[0])
-
+            visualize_maps(self.maps[0])
         else:
             raise NotImplementedError(f"{self.mode} has currently not been implemented")
 

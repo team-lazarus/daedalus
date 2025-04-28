@@ -93,6 +93,7 @@ class PPOTrainer:
         log_level: int = DEFAULT_LOG_LEVEL,
         log_window_size: int = LOGGING_WINDOW,
     ):
+        self.env_mode = env_mode
         self.num_episodes = num_episodes
         self.device = torch.device(device)
         self.env_batch_size = batch_size
@@ -189,7 +190,7 @@ class PPOTrainer:
         self.logger.info("Initializing Actor and Critic networks.")
         try:
             obs_size = self.env.obs_dim
-            action_size = 7 if self.env_mode == "TURTLE" else self.env.action_space
+            action_size = self.env.action_space
             actor = DaedalusActionPredictor(obs_size, action_size).to(self.device)
             critic = ValueNetwork(obs_size).to(self.device)
             self.logger.info(f"Actor Network: {type(actor).__name__}")
@@ -863,8 +864,6 @@ class PPOTrainer:
                         terminals = dones | truncateds  # Combined flag for resets etc.
 
                         # 3. Store transition
-                        finetuned_actions = actions.cpu()
-                        finetuned_actions[finetuned_actions > 2] = finetuned_actions[finetuned_actions > 2] + 4
                         step_data = TrajectoryStep(
                             observation=self.current_observation.cpu(),  # Store on CPU to save GPU memory
                             action=actions.cpu(),

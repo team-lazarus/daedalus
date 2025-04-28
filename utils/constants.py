@@ -1,7 +1,9 @@
 TILE_EMPTY = 1
-ENEMY_TILES = [2, 3, 4, 5]
+#ENEMY_TILES = [2, 3, 4, 5]
+ENEMY_TILES = [2]
 TILE_DOOR = 6
-MODIFICATION_ACTIONS = 7
+#MODIFICATION_ACTIONS = 7
+MODIFICATION_ACTIONS = 3
 NO_ACTION = {7}
 MOVE_ACTION = {
     7: lambda i, j, s: (max(0, i - 1), j),  # left
