@@ -13,3 +13,4 @@ agents/ppo_checkpoints_episodic_metrics/
 ppo_checkpoints_episodic_metrics/
 agentsv2/*checkpoints
 agentsv2/logs
+agentsv2/ppo_daedalus_logs/*.csv
