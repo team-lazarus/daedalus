@@ -293,7 +293,7 @@ class DaedalusEnvironment:
             self.current_positions = torch.from_numpy(pos_np).to(device=self.device)
 
             # 5) (optional) re-visualize
-            #visualize_maps(self.maps[0])
+            visualize_maps(self.maps[0])
 
             
         else:
