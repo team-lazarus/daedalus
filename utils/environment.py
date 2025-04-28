@@ -16,6 +16,7 @@ from rich.progress import (
     TaskID,
 )
 from rich import print as rprint
+from tqdm import tqdm
 
 
 # Assuming Daedalus constants and critic model are correctly imported
@@ -24,7 +25,7 @@ from daedalus.critics.critic_approximator import CriticApproximatorMLP
 
 console = Console()
 
-def visualize_maps(map, x, y, title: str ="- Map 0 -") -> None:
+def visualize_maps(map, x=0, y=0, title: str ="- Map 0 -") -> None:
         """Visualize maps using rich."""
 
         color_map = {
@@ -135,7 +136,33 @@ class DaedalusEnvironment:
             )
 
         # Initialize state variables on the first reset
+        self._generate_maps()
         self._initialize_state()
+    
+    def _generate_maps(self, seed: Optional[int] = None):
+        self.bootstrapped_maps = []
+        if seed is not None:
+            # Note: This seeds the global random state.
+            # For perfectly isolated seeding per reset, more complex handling is needed.
+            random.seed(seed)
+            np.random.seed(seed)
+            torch.manual_seed(seed)
+            if self.device.type == "cuda":
+                torch.cuda.manual_seed(seed)
+
+        console.print("[bold][cyan]= Initializing a massive batch of maps =[/cyan][/bold]")
+        for i in tqdm(range(self.batch_size*128)):
+            # Randomly choose a generation algorithm
+            map_data = self._apply_random_walk(i)
+
+            # Set random starting position for this environment
+            start_row = random.randint(0, self.map_size[0] - 1)
+            start_col = random.randint(0, self.map_size[1] - 1)
+
+            self.bootstrapped_maps.append((start_row, start_col, map_data))
+
+
+
 
     def _initialize_state(self):
         """Initializes or resets the core state tensors."""
@@ -164,32 +191,23 @@ class DaedalusEnvironment:
         Returns:
             Initial observation tensor of shape (batch_size, obs_dim).
         """
-        if seed is not None:
-            # Note: This seeds the global random state.
-            # For perfectly isolated seeding per reset, more complex handling is needed.
-            random.seed(seed)
-            np.random.seed(seed)
-            torch.manual_seed(seed)
-            if self.device.type == "cuda":
-                torch.cuda.manual_seed(seed)
+        
 
         # Re-initialize all state tensors
         self._initialize_state()
 
         # Apply procedural generation and set initial positions for each environment
-        for i in range(self.batch_size):
-            # Randomly choose a generation algorithm
-            gen_algorithm = random.choice(["random_walk", "connected_squares"])
-            if gen_algorithm == "random_walk":
-                self._apply_random_walk(i)
-            else:
-                self._apply_connected_squares(i)
-
-            # Set random starting position for this environment
-            start_row = random.randint(0, self.map_size[0] - 1)
-            start_col = random.randint(0, self.map_size[1] - 1)
-            self.current_positions[i, 0] = start_row
-            self.current_positions[i, 1] = start_col
+        samples = random.sample(self.bootstrapped_maps, self.batch_size)
+        self.maps = []
+        self.current_positions = []
+        for row, col, map_data in samples:
+            self.maps.append(map_data)
+            self.current_positions.append([row, col])
+        
+        self.maps = torch.from_numpy(np.array(self.maps, dtype=np.int64))
+        self.current_positions = torch.from_numpy(np.array(self.current_positions, dtype=np.int64))
+        self.maps = self.maps.to(device=self.device)
+        self.current_positions = self.current_positions.to(device=self.device)
 
         # Create and return the initial observations
         initial_observations = self._create_observations()
@@ -230,6 +248,58 @@ class DaedalusEnvironment:
         # Process actions for each environment
         rewards = torch.zeros(self.batch_size, dtype=torch.float32, device=self.device)
 
+        if self.mode == "TURTLE":
+            #   self.maps         is a torch.Tensor of shape [B, H, W]
+            #   self.current_positions is a torch.Tensor of shape [B, 2]  (row, col)
+            #   actions           is a 1D tensor of length B
+            #   c.MODIFICATION_ACTIONS == number of “paint” actions
+            #
+            # device is already defined
+
+            # 1) pull out NumPy buffers
+            maps_np = self.maps.cpu().detach().numpy()               # shape (B, H, W)
+            pos_np  = self.current_positions.cpu().detach().numpy()  # shape (B, 2)
+            acts_np = actions                 # shape (B,)
+
+            B, H, W = maps_np.shape
+
+            # 2) modification (painting) actions
+            mod_mask   = acts_np < c.MODIFICATION_ACTIONS           # shape (B,)
+            batch_idx  = np.nonzero(mod_mask)[0]                    # e.g. [0,3,5,12,…]
+            pos_mod    = pos_np[mod_mask]                           # shape (M,2)
+            maps_np[batch_idx, pos_mod[:,0], pos_mod[:,1]] = acts_np[mod_mask]
+
+            # 3) movement actions
+            move_mask  = ~mod_mask                                 # or acts_np >= c.MODIFICATION_ACTIONS
+            rows, cols = pos_np[:,0].copy(), pos_np[:,1].copy()    # make sure we’re not overwriting pos_np too early
+
+            # action codes → vector masks
+            up    =  acts_np == (c.MODIFICATION_ACTIONS + 0)   # e.g. 7
+            left  =  acts_np == (c.MODIFICATION_ACTIONS + 1)   # e.g. 8
+            down  =  acts_np == (c.MODIFICATION_ACTIONS + 2)   # e.g. 9
+            right =  acts_np == (c.MODIFICATION_ACTIONS + 3)   # e.g. 10
+
+            # clamp into valid range [0 … H-1] or [0 … W-1]
+            rows[up]    = np.maximum(0,            rows[up]    - 1)
+            rows[down]  = np.minimum(H - 1,        rows[down]  + 1)
+            cols[left]  = np.maximum(0,            cols[left]  - 1)
+            cols[right] = np.minimum(W - 1,        cols[right] + 1)
+
+            # write back
+            pos_np[:,0], pos_np[:,1] = rows, cols
+
+            # 4) push back into torch
+            self.maps = torch.from_numpy(maps_np).to(device=self.device)
+            self.current_positions = torch.from_numpy(pos_np).to(device=self.device)
+
+            # 5) (optional) re-visualize
+            #visualize_maps(self.maps[0])
+
+            
+        else:
+            raise NotImplementedError(f"{self.mode} has currently not been implemented")
+
+        """
         for i in range(self.batch_size):
             act = actions[i]  # Get action for the i-th environment
             current_row, current_col = self.current_positions[i]
@@ -262,10 +332,8 @@ class DaedalusEnvironment:
                             current_col.item(),
                             self.map_size[1],
                         )
-                        """
                         if i == 0:
                             print("new:",new_row, new_col)
-                        """
                         self.current_positions[i, 0] = new_row
                         self.current_positions[i, 1] = new_col
 
@@ -301,6 +369,7 @@ class DaedalusEnvironment:
                         # Optionally reset consecutive moves if relevant for WIDE mode
                         # self.consecutive_moves[i] = 0
                 # else: Handle invalid action index if necessary
+        """
 
         # --- Calculate Rewards ---
         # Add rewards from critic if available
@@ -366,9 +435,13 @@ class DaedalusEnvironment:
     def _apply_random_walk(self, batch_idx: int):
         """Apply random walk algorithm to generate a map for a specific batch index."""
         # Clear the existing map for this index first
-        self.maps[batch_idx].zero_()
+        pcgrl_map = torch.zeros(
+            (self.map_size[0], self.map_size[1]),
+            dtype=torch.int64,
+            device=self.device,
+        )
 
-        steps = random.randint(20, 50)
+        steps = random.randint(32, 128)
         row, col = random.randint(0, self.map_size[0] - 1), random.randint(
             0, self.map_size[1] - 1
         )
@@ -382,7 +455,7 @@ class DaedalusEnvironment:
                 tile_type = c.TILE_DOOR
             else:  # 16% enemy
                 tile_type = random.choice(c.ENEMY_TILES)
-            self.maps[batch_idx, row, col] = tile_type
+            pcgrl_map[row, col] = tile_type
 
             # Move randomly
             direction = random.randint(0, 3)  # 0: up, 1: down, 2: left, 3: right
@@ -394,6 +467,8 @@ class DaedalusEnvironment:
                 col -= 1
             elif direction == 3 and col < self.map_size[1] - 1:
                 col += 1
+        
+        return pcgrl_map
 
     def _apply_connected_squares(self, batch_idx: int):
         """Generate a map with connected squares for a specific batch index."""
