@@ -22,9 +22,12 @@ from tqdm import tqdm
 # Assuming Daedalus constants and critic model are correctly imported
 import daedalus.utils.constants as c
 from daedalus.critics.critic_approximator import CriticApproximatorMLP
+from daedalus.critics.level_criticv6 import level_critic_vectorized
 
 console = Console()
 
+def clamp(n: float):
+    return int(max(64, min(n, 128)))
 
 def visualize_maps(map, x=0, y=0, title: str = "- Map 0 -") -> None:
     """Visualize maps using rich."""
@@ -304,81 +307,9 @@ class DaedalusEnvironment:
             self.current_positions = torch.from_numpy(pos_np).to(device=self.device)
 
             # 5) (optional) re-visualize
-            visualize_maps(self.maps[0])
+            # visualize_maps(self.maps[0])
         else:
             raise NotImplementedError(f"{self.mode} has currently not been implemented")
-
-        """
-        for i in range(self.batch_size):
-            act = actions[i]  # Get action for the i-th environment
-            current_row, current_col = self.current_positions[i]
-
-            if self.mode == "NARROW":
-                if act < c.MODIFICATION_ACTIONS:  # Modification action
-                    self.maps[i, current_row, current_col] = act
-                    self.consecutive_moves[i] = (
-                        0  # Reset consecutive moves if applicable
-                    )
-                # Action >= c.MODIFICATION_ACTIONS corresponds to NO_ACTION, do nothing
-
-            elif self.mode == "TURTLE":
-                if act < c.MODIFICATION_ACTIONS:  # Modification action
-                    self.maps[i, current_row, current_col] = act
-                    self.consecutive_moves[i] = 0  # Reset consecutive moves counter
-                    
-                else:  # Movement action (index >= c.MODIFICATION_ACTIONS)
-                    if i == 0:
-                        pass
-                        #print(current_row, current_col)
-                        #visualize_maps(self.maps[i], current_row, current_col)
-                    move_index = act # Adjust index for MOVE_ACTION dict
-                    if move_index in c.MOVE_ACTION:
-                        self.consecutive_moves[i] += 1
-                        move_func = c.MOVE_ACTION[move_index]
-                        # Ensure indices are Python ints for the function
-                        new_row, new_col = move_func(
-                            current_row.item(),
-                            current_col.item(),
-                            self.map_size[1],
-                        )
-                        if i == 0:
-                            print("new:",new_row, new_col)
-                        self.current_positions[i, 0] = new_row
-                        self.current_positions[i, 1] = new_col
-
-                        # Apply punishment for repeated movement
-                        if self.consecutive_moves[i] > 5:
-                            # Exponential punishment increases quickly
-                            punishment = -(
-                                1.05 ** (self.consecutive_moves[i].item() - 5)
-                            )
-                            rewards[i] += punishment
-                    else:
-                        # Handle invalid action index if necessary
-                        # print(f"Warning: Invalid move action index {move_index} for TURTLE mode.")
-                        pass
-
-            elif self.mode == "WIDE":
-                # WIDE mode action encodes both modification type and cell location
-                map_size_prod = self.map_size[0] * self.map_size[1]
-                if act < c.MODIFICATION_ACTIONS * map_size_prod:
-                    modification_type = act % c.MODIFICATION_ACTIONS
-                    cell_index = act // c.MODIFICATION_ACTIONS
-
-                    # Convert flat cell index to 2D coordinates
-                    target_row = cell_index // self.map_size[1]
-                    target_col = cell_index % self.map_size[1]
-
-                    # Apply modification if coordinates are valid
-                    if (
-                        0 <= target_row < self.map_size[0]
-                        and 0 <= target_col < self.map_size[1]
-                    ):
-                        self.maps[i, target_row, target_col] = modification_type
-                        # Optionally reset consecutive moves if relevant for WIDE mode
-                        # self.consecutive_moves[i] = 0
-                # else: Handle invalid action index if necessary
-        """
 
         # --- Calculate Rewards ---
         # Add rewards from critic if available
@@ -388,7 +319,7 @@ class DaedalusEnvironment:
                 # or (batch, features) depending on its architecture.
                 # Assuming MLP critic expects flattened maps:
                 x = torch.unsqueeze(self.maps, dim=1).float()
-                critic_rewards = self.critic(x).squeeze(
+                critic_rewards = level_critic_vectorized(x).squeeze(
                     -1
                 )  # Remove trailing dim if present
                 rewards += critic_rewards
@@ -441,6 +372,7 @@ class DaedalusEnvironment:
 
         return next_observations, rewards_np / 100, dones_np, truncateds_np, infos
 
+    
     def _apply_random_walk(self, batch_idx: int):
         """Apply random walk algorithm to generate a map for a specific batch index."""
         # Clear the existing map for this index first
@@ -450,7 +382,9 @@ class DaedalusEnvironment:
             device=self.device,
         )
 
-        steps = random.randint(96, 128)
+        # steps = random.randint(64, 128)
+        
+        steps = clamp(random.normalvariate(88, 16))
         row, col = random.randint(0, self.map_size[0] - 1), random.randint(
             0, self.map_size[1] - 1
         )

@@ -1048,7 +1048,7 @@ class PPOTrainer:
 if __name__ == "__main__":
     trainer = PPOTrainer(
         env_mode="TURTLE",
-        batch_size=8192 // 16,
+        batch_size=8192 // 512,
         learning_rate=3e-4,
         gamma=0.99,
         gae_lambda=0.85,
@@ -1072,4 +1072,4 @@ if __name__ == "__main__":
 
     # Example: Start training, save every 500 episodes
     # Optionally resume: resume_from="ppo_daedalus_checkpoints/checkpoint_episode_XXX.pt"
-    trainer.train(checkpoint_interval=500, resume_from=None)
+    trainer.train(checkpoint_interval=500, resume_from="ppo_daedalus_checkpoints/checkpoint_episode_779.pt")
