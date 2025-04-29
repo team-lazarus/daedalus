@@ -107,7 +107,7 @@ class DaedalusEnvironment:
         self.step_count: Optional[torch.Tensor] = None
 
         # Calculate observation dimension
-        self.obs_dim = (map_size[0] * map_size[1]) + 2 + c.HERO_TENSOR_SIZE
+        self.obs_dim = (map_size[0] * map_size[1]) + 3 + c.HERO_TENSOR_SIZE
 
         # Calculate action space size based on mode
         if self.mode == "NARROW":
@@ -288,6 +288,11 @@ class DaedalusEnvironment:
 
             # 3) movement actions
             move_mask = ~mod_mask  # or acts_np >= c.MODIFICATION_ACTIONS
+            self.consecutive_moves[move_mask] += 1
+            moved = self.consecutive_moves.clone()
+            moved[moved < self.map_size[0]] = 0
+            no_move_punishment = -(1.05**moved)
+
             rows, cols = (
                 pos_np[:, 0].copy(),
                 pos_np[:, 1].copy(),
@@ -327,7 +332,7 @@ class DaedalusEnvironment:
             critic_rewards = level_critic_vectorized(x).squeeze(
                 -1
             )  # Remove trailing dim if present
-            rewards = critic_rewards
+            rewards = critic_rewards + no_move_punishment
 
         # --- Check for Termination and Truncation ---
         # Termination: Usually based on environment-specific goals (not implemented here)
@@ -498,6 +503,7 @@ class DaedalusEnvironment:
         # Current positions part (batch_size, 2)
         obs[:, flat_map_size] = self.current_positions[:, 0].float()  # Row
         obs[:, flat_map_size + 1] = self.current_positions[:, 1].float()  # Column
+        obs[:, flat_map_size + 2] = self.consecutive_moves.float()  # Column
 
         # Hero data part (batch_size, HERO_TENSOR_SIZE)
         # Assuming hero_data is all zeros for now. If hero data varies per batch,

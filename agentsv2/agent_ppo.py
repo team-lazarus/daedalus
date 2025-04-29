@@ -1052,7 +1052,7 @@ class PPOTrainer:
 if __name__ == "__main__":
     trainer = PPOTrainer(
         env_mode="TURTLE",
-        batch_size=8192 // 512,
+        batch_size=8192 // 256,
         learning_rate=3e-4,
         gamma=0.99,
         gae_lambda=0.85,
@@ -1066,7 +1066,7 @@ if __name__ == "__main__":
         log_dir="ppo_daedalus_logs",
         critic_path="latest_checkpoint.pth",  # "latest_checkpoint.pth" # Set path if needed
         map_size=(12, 12),
-        steps_per_episode=64,  # Total steps collected across envs per episode
+        steps_per_episode=256,  # Total steps collected across envs per episode
         update_interval=32,  # Perform PPO update every 128 steps
         num_episodes=50000,
         mini_batch_factor=4,
