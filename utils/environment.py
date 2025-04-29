@@ -353,7 +353,6 @@ class DaedalusEnvironment:
         difference_reward = torch.abs(torch.sign(self.maps - self.original_maps))
         difference_reward = 0.0005 * torch.sum(difference_reward, dim=(1,2))
         difference_reward = difference_reward.cpu().numpy()
-        print(difference_reward)
 
         rewards_np = rewards_np + difference_reward
 
