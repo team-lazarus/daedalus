@@ -549,12 +549,14 @@ class PPOTrainer:
             raise ValueError("Cannot select action, observation is None.")
         if observation.device != self.device:
             observation = observation.to(self.device)
+        
 
         try:
             self.actor.eval()  # Set actor to evaluation mode for consistency
             self.critic.eval()  # Set critic to evaluation mode for consistency
             with torch.no_grad():
                 logits = self.actor(observation)
+                self.logits = logits
                 dist = Categorical(logits=logits)
                 actions = dist.sample()
                 log_probs = dist.log_prob(actions)
@@ -1047,6 +1049,76 @@ class PPOTrainer:
             self.console.print(
                 "[bold green]Training finished or stopped. Final checkpoint saved.[/bold green]"
             )
+    
+    def get_transition_data(self):
+        for episode in range(1):
+            self.current_observation = self._reset_environment()
+            previous_rewards = self.env.get_initial_rewards()
+
+            episode_rewards_sum = np.zeros(self.env_batch_size)
+            episode_true_lengths = np.zeros(
+                self.env_batch_size, dtype=int
+            )  # Length until done/truncated
+            episode_active = np.ones(
+                self.env_batch_size, dtype=bool
+            )  # Track active envs
+
+            ep_policy_losses, ep_value_losses, ep_entropies = [], [], []
+
+            self.visualize_maps(
+                getattr(self.env, "maps", None),
+                f"Initial Maps (Start of Training)",
+            )
+
+            # --- Rollout Phase ---
+            self.logger.debug(f"Starting Episode {episode}")
+            steps_collected_in_episode = 0
+
+            actions = None
+            rewards = previous_rewards
+            logits = None
+            position_final = self.env.current_positions[0]
+
+            while steps_collected_in_episode < self.steps_per_episode+1:
+                # 1. Select action and get value estimate
+                if steps_collected_in_episode > 0:
+                    actions, log_probs, values = self.select_action(
+                        self.current_observation
+                    )
+                    logits = self.logits[0]
+
+                    # 2. Step the environment
+                    next_observation, rewards, dones, truncateds, infos = (
+                        self._step_environment(actions)
+                    )
+
+                    if steps_collected_in_episode == self.steps_per_episode - 1:
+                        self.visualize_maps(
+                            getattr(self.env, "maps", None),
+                            f"Final Maps (Episode {episode} End)",
+                        )
+
+                steps_collected_in_episode += 1
+                yield (position_final.tolist() ,actions.tolist() if actions is not None else None, rewards[0].tolist(), logits.tolist() if logits is not None else None)
+    
+    def export_transition_data(self):
+        transitions = []
+        for posn, action, reward, log_probs in self.get_transition_data():
+            transitions.append({
+                "position" : posn,
+                "action" : action,
+                "reward" : reward,
+                "log_probs": log_probs
+            })
+
+        data = {
+            "initial_state" : self.env.maps[0].tolist(),
+            "transitions" : transitions
+        }
+
+        import json
+        
+        json.dump(data, open("transitions.json", mode="w+"))
 
 
 if __name__ == "__main__":
@@ -1076,4 +1148,5 @@ if __name__ == "__main__":
 
     # Example: Start training, save every 500 episodes
     # Optionally resume: resume_from="ppo_daedalus_checkpoints/checkpoint_episode_XXX.pt"
-    trainer.train(checkpoint_interval=500, resume_from="ppo_daedalus_checkpoints/checkpoint_episode_779.pt")
+    trainer.export_transition_data()
+    #trainer.train(checkpoint_interval=500, resume_from="ppo_daedalus_checkpoints/checkpoint_episode_779.pt")
