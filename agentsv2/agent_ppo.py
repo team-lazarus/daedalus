@@ -30,6 +30,17 @@ from daedalus.utils.environment import DaedalusEnvironment
 import daedalus.utils.constants as c
 from daedalus.critics.critic_approximator import CriticConfig
 
+import logging
+from rich.logging import RichHandler
+
+FORMAT = "%(message)s"
+logging.basicConfig(
+    level="INFO", format=FORMAT, datefmt="[%X]", handlers=[RichHandler()]
+)
+
+log = logging.getLogger("rich")
+log.info("Hello, World!")
+
 # Define a structure for storing trajectory steps
 TrajectoryStep = namedtuple(
     "TrajectoryStep", ["observation", "action", "log_prob", "value", "reward", "done"]
@@ -476,7 +487,7 @@ class PPOTrainer:
 
         self.logger.info(f"Attempting to load checkpoint from: {checkpoint_path}")
         try:
-            checkpoint = torch.load(checkpoint_path, map_location=self.device)
+            checkpoint = torch.load(checkpoint_path, map_location=self.device, weights_only=False)
 
             self.actor.load_state_dict(checkpoint["actor_state_dict"])
             self.critic.load_state_dict(checkpoint["critic_state_dict"])
@@ -789,6 +800,7 @@ class PPOTrainer:
         start_episode = 0
         if resume_from:
             start_episode = self._load_checkpoint(resume_from)
+            self.logger.info("checkpoint loaded successfully")
         if start_episode >= self.num_episodes:
             self.logger.warning(
                 "Start episode %d is >= total episodes %d. No training needed.",
@@ -1148,5 +1160,5 @@ if __name__ == "__main__":
 
     # Example: Start training, save every 500 episodes
     # Optionally resume: resume_from="ppo_daedalus_checkpoints/checkpoint_episode_XXX.pt"
-    trainer.export_transition_data()
-    #trainer.train(checkpoint_interval=500, resume_from="ppo_daedalus_checkpoints/checkpoint_episode_779.pt")
+    #trainer.export_transition_data()
+    trainer.train(checkpoint_interval=500, resume_from="ppo_daedalus_checkpoints/checkpoint_episode_983.pt")

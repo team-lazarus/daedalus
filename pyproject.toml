@@ -7,6 +7,7 @@ requires-python = ">=3.12"
 dependencies = [
     "black>=25.1.0",
     "gym>=0.26.2",
+    "ipython>=9.2.0",
     "joblib>=1.4.2",
     "lightning>=2.5.1",
     "mpi4py>=4.0.3",

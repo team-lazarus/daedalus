@@ -222,6 +222,7 @@ class DaedalusEnvironment:
         self.maps = torch.tensor(
             np.array(maps_list, dtype=np.int64), device=self.device
         )
+        self.original_maps = self.maps.clone()
         self.current_positions = torch.tensor(
             np.array(positions_list, dtype=np.int64), device=self.device
         )
@@ -349,6 +350,13 @@ class DaedalusEnvironment:
         # --- Prepare Return Values ---
         # Convert rewards, dones, truncateds to NumPy arrays for standard interface
         rewards_np = rewards.cpu().numpy()
+        difference_reward = torch.abs(torch.sign(self.maps - self.original_maps))
+        difference_reward = 0.0005 * torch.sum(difference_reward, dim=(1,2))
+        difference_reward = difference_reward.cpu().numpy()
+        print(difference_reward)
+
+        rewards_np = rewards_np + difference_reward
+
         dones_np = dones.cpu().numpy()
         truncateds_np = truncateds.cpu().numpy()
 
