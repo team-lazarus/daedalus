@@ -144,6 +144,12 @@ class DaedalusEnvironment:
         self._generate_maps()
         self._initialize_state()
 
+    def get_initial_rewards(self):
+        x = torch.unsqueeze(self.maps, dim=1).float()
+        critic_rewards = level_critic_vectorized(x).squeeze(
+            -1
+        )  # Remove trailing dim if present
+        return critic_rewards
     def _generate_maps(self, seed: Optional[int] = None):
         self.bootstrapped_maps = []
         if seed is not None:
@@ -313,16 +319,15 @@ class DaedalusEnvironment:
 
         # --- Calculate Rewards ---
         # Add rewards from critic if available
-        if self.critic is not None:
-            with torch.no_grad():  # Ensure no gradients are calculated for critic
-                # Critic expects input shape like (batch, channels, height, width)
-                # or (batch, features) depending on its architecture.
-                # Assuming MLP critic expects flattened maps:
-                x = torch.unsqueeze(self.maps, dim=1).float()
-                critic_rewards = level_critic_vectorized(x).squeeze(
-                    -1
-                )  # Remove trailing dim if present
-                rewards += critic_rewards
+        with torch.no_grad():  # Ensure no gradients are calculated for critic
+            # Critic expects input shape like (batch, channels, height, width)
+            # or (batch, features) depending on its architecture.
+            # Assuming MLP critic expects flattened maps:
+            x = torch.unsqueeze(self.maps, dim=1).float()
+            critic_rewards = level_critic_vectorized(x).squeeze(
+                -1
+            )  # Remove trailing dim if present
+            rewards = critic_rewards
 
         # --- Check for Termination and Truncation ---
         # Termination: Usually based on environment-specific goals (not implemented here)
@@ -339,7 +344,6 @@ class DaedalusEnvironment:
         # --- Prepare Return Values ---
         # Convert rewards, dones, truncateds to NumPy arrays for standard interface
         rewards_np = rewards.cpu().numpy()
-        print(np.mean(rewards_np))
         dones_np = dones.cpu().numpy()
         truncateds_np = truncateds.cpu().numpy()
 

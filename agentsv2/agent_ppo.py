@@ -808,6 +808,7 @@ class PPOTrainer:
             TimeRemainingColumn(),
         ]
 
+        
         try:
             with Progress(
                 *progress_columns, console=self.console, transient=False
@@ -824,6 +825,8 @@ class PPOTrainer:
 
                 for episode in range(start_episode, total_episodes):
                     self.current_observation = self._reset_environment()
+                    previous_rewards = self.env.get_initial_rewards()
+
                     self.metrics["episode"] = episode
                     episode_rewards_sum = np.zeros(self.env_batch_size)
                     episode_true_lengths = np.zeros(
@@ -854,6 +857,7 @@ class PPOTrainer:
                         next_observation, rewards, dones, truncateds, infos = (
                             self._step_environment(actions)
                         )
+                        rewards, previous_rewards = rewards - previous_rewards, rewards
                         steps_collected_in_episode += 1
                         if steps_collected_in_episode == self.steps_per_episode - 1:
                             self.visualize_maps(
@@ -875,7 +879,7 @@ class PPOTrainer:
                         self.rollout_buffer.append(step_data)
 
                         # 4. Update episode trackers
-                        episode_rewards_sum += rewards.cpu().numpy() * episode_active
+                        episode_rewards_sum += rewards.cpu().numpy() * episode_active / self.steps_per_episode
                         episode_true_lengths += 1 * episode_active
                         newly_finished = terminals.cpu().numpy() & episode_active
                         episode_active[newly_finished] = False  # Mark finished envs
@@ -1062,7 +1066,7 @@ if __name__ == "__main__":
         log_dir="ppo_daedalus_logs",
         critic_path="latest_checkpoint.pth",  # "latest_checkpoint.pth" # Set path if needed
         map_size=(12, 12),
-        steps_per_episode=256,  # Total steps collected across envs per episode
+        steps_per_episode=64,  # Total steps collected across envs per episode
         update_interval=32,  # Perform PPO update every 128 steps
         num_episodes=50000,
         mini_batch_factor=4,
