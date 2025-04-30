@@ -1161,4 +1161,4 @@ if __name__ == "__main__":
     # Example: Start training, save every 500 episodes
     # Optionally resume: resume_from="ppo_daedalus_checkpoints/checkpoint_episode_XXX.pt"
     #trainer.export_transition_data()
-    trainer.train(checkpoint_interval=500, resume_from="ppo_daedalus_checkpoints/checkpoint_episode_983.pt")
+    trainer.train(checkpoint_interval=500, resume_from="ppo_daedalus_checkpoints/checkpoint_episode_2823.pt")

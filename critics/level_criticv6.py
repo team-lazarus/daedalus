@@ -51,7 +51,7 @@ PENALTY_DOOR_SAME_EDGE: float = -7.0
 PENALTY_NO_ENEMIES: float = -9.0  # New: Min 1 enemy
 PENALTY_TOO_MANY_ENEMIES: float = -6.0  # Existing: Max 4 enemies
 # Rule 5: Disconnected empty/enemy tiles
-PENALTY_DISCONNECTED_TILE: float = -2
+PENALTY_DISCONNECTED_TILE: float = -5
 # Rule 6: Door lacks adjacent empty/enemy tile
 PENALTY_DOOR_NO_EMPTY_NEIGHBOR: float = -4.0
 # Rule 7: < 50% empty/enemy tiles
@@ -236,9 +236,15 @@ def evaluate_rule7_empty_ratio(empty_enemy_counts: torch.Tensor) -> torch.Tensor
 
 def find_connected_components(map_batch: torch.Tensor, tile_values: Set[int]) -> torch.Tensor:
     """
-    Find connected components sizes using Flood Fill for multiple maps.
+    Find all connected components with values > 0 for multiple maps.
+    Penalizes each connected component which is not the biggest based on its tile count.
     
-    Returns a tensor of penalties based on disconnected tiles.
+    Args:
+        map_batch: Batch of maps [batch_size, MAP_HEIGHT, MAP_WIDTH]
+        tile_values: Set of tile values to consider traversable
+        
+    Returns:
+        A tensor of penalties based on disconnected components
     """
     batch_size = map_batch.shape[0]
     penalties = torch.zeros(batch_size, device=map_batch.device, dtype=torch.float32)
@@ -248,52 +254,64 @@ def find_connected_components(map_batch: torch.Tensor, tile_values: Set[int]) ->
     for tile in tile_values:
         traversable_maps |= (map_batch == tile)
     
-    # Process each map in the batch (this part is still sequential)
-    # We need sequential processing for flood fill, but we can optimize the implementation
+    # Process each map in the batch
     for b in range(batch_size):
         traversable = traversable_maps[b]
-        total_traversable = traversable.sum().item()
         
-        # Skip if 0 or 1 tiles (always connected)
-        if total_traversable <= 1:
+        # Skip if no traversable tiles
+        if not traversable.sum().item():
             continue
         
-        # Find first traversable position
-        y, x = torch.where(traversable)
-        if len(y) == 0:
-            continue
-            
-        start_pos = (y[0].item(), x[0].item())
-        
-        # Perform flood fill to find connected component
+        # Track all connected components
         visited = torch.zeros_like(traversable, dtype=torch.bool)
-        queue = [(start_pos[0], start_pos[1])]
-        visited[start_pos[0], start_pos[1]] = True
+        components = []  # List to store sizes of connected components
         
-        # Optimized floodfill using queue
-        while queue:
-            cy, cx = queue.pop(0)
-            
-            # Check 4-directional neighbors
-            for dy, dx in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
-                ny, nx = cy + dy, cx + dx
+        # Find all connected components
+        for y in range(traversable.shape[0]):
+            for x in range(traversable.shape[1]):
+                # Skip if not traversable or already visited
+                if not traversable[y, x] or visited[y, x]:
+                    continue
                 
-                # Check bounds
-                if 0 <= ny < MAP_HEIGHT and 0 <= nx < MAP_WIDTH:
-                    if traversable[ny, nx] and not visited[ny, nx]:
-                        visited[ny, nx] = True
-                        queue.append((ny, nx))
+                # Start a new component
+                component_size = 0
+                queue = [(y, x)]
+                visited[y, x] = True
+                
+                # Flood fill to find this component
+                while queue:
+                    cy, cx = queue.pop(0)
+                    component_size += 1
+                    
+                    # Check 4-directional neighbors
+                    for dy, dx in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
+                        ny, nx = cy + dy, cx + dx
+                        
+                        # Check bounds
+                        if 0 <= ny < traversable.shape[0] and 0 <= nx < traversable.shape[1]:
+                            if traversable[ny, nx] and not visited[ny, nx]:
+                                visited[ny, nx] = True
+                                queue.append((ny, nx))
+                
+                # Store this component's size
+                components.append(component_size)
         
-        # Count visited tiles and calculate penalty
-        connected_count = visited.sum().item()
-        unconnected_count = total_traversable - connected_count
-        
-        # Penalty is based on the smaller group (same as original implementation)
-        penalties[b] = min(unconnected_count, connected_count) * PENALTY_DISCONNECTED_TILE
+        # If there are connected components
+        if components:
+            # Find the largest component
+            largest_component_size = max(components)
+            
+            # Calculate penalty for all non-largest components
+            total_penalty = 0
+            for component_size in components:
+                if component_size != largest_component_size:
+                    total_penalty += component_size * PENALTY_DISCONNECTED_TILE
+            
+            penalties[b] = total_penalty
+            
+            # Debugging info
     
     return penalties
-
-
 # --- Main Critic Function (Vectorized) ---
 
 def level_critic_vectorized(x: torch.Tensor) -> torch.Tensor:
@@ -476,6 +494,9 @@ if __name__ == "__main__":
     test_map_1[6, -1] = TileType.DOOR.value  # Right (4 doors total)
     test_map_1[3, 3] = TileType.ENEMY_2.value
     test_map_1[8, 8] = TileType.ENEMY_3.value  # 2 enemies total
+    test_map_1[1: -1, 2] = TileType.WALL.value
+    test_map_1[2, 1: -1] = TileType.WALL.value
+    print(test_map_1)
 
     # Test Case 2: Multiple errors (Large negative reward)
     test_map_2 = torch.zeros((MAP_HEIGHT, MAP_WIDTH), dtype=torch.int)
@@ -509,7 +530,7 @@ if __name__ == "__main__":
     test_map_5 = torch.zeros((MAP_HEIGHT, MAP_WIDTH), dtype=torch.int)
 
     # Create batch in different formats to test the function's flexibility
-    map_batch = torch.stack([test_map_1, test_map_2, test_map_3, test_map_4, test_map_5])
+    map_batch = torch.stack([test_map_1])#, test_map_2, test_map_3, test_map_4, test_map_5])
     
     # Test with standard format (batch, height, width)
     standard_input = map_batch
