@@ -51,7 +51,7 @@ PENALTY_DOOR_SAME_EDGE: float = -7.0
 PENALTY_NO_ENEMIES: float = -9.0  # New: Min 1 enemy
 PENALTY_TOO_MANY_ENEMIES: float = -6.0  # Existing: Max 4 enemies
 # Rule 5: Disconnected empty/enemy tiles
-PENALTY_DISCONNECTED_TILE: float = -5
+PENALTY_DISCONNECTED_TILE: float = -2.5
 # Rule 6: Door lacks adjacent empty/enemy tile
 PENALTY_DOOR_NO_EMPTY_NEIGHBOR: float = -4.0
 # Rule 7: < 50% empty/enemy tiles

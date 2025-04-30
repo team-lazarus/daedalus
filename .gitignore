@@ -15,3 +15,8 @@ agentsv2/*checkpoints
 agentsv2/logs
 agentsv2/ppo_daedalus_logs/*.csv
 agentsv2/latest.txt
+
+ppo_daedalus_checkpoints/
+ppo_daedalus_logs/
+transitions.json
+uv.lock

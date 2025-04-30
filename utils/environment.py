@@ -351,7 +351,7 @@ class DaedalusEnvironment:
         # Convert rewards, dones, truncateds to NumPy arrays for standard interface
         rewards_np = rewards.cpu().numpy()
         difference_reward = torch.abs(torch.sign(self.maps - self.original_maps))
-        difference_reward = 0.0005 * torch.sum(difference_reward, dim=(1,2))
+        difference_reward = 0.01 * torch.sum(difference_reward, dim=(1,2))
         difference_reward = difference_reward.cpu().numpy()
 
         rewards_np = rewards_np + difference_reward
@@ -379,8 +379,8 @@ class DaedalusEnvironment:
                 else:
                     self._apply_connected_squares(idx.item())
 
-                start_row = random.randint(0, self.map_size[0] - 1)
-                start_col = random.randint(0, self.map_size[1] - 1)
+                start_row = random.randint(1, self.map_size[0] - 2)
+                start_col = random.randint(1, self.map_size[1] - 2)
                 self.current_positions[idx, 0] = start_row
                 self.current_positions[idx, 1] = start_col
 

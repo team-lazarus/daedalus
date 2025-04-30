@@ -1111,9 +1111,13 @@ class PPOTrainer:
                         )
 
                 steps_collected_in_episode += 1
-                yield (position_final.tolist() ,actions.tolist() if actions is not None else None, rewards[0].tolist(), logits.tolist() if logits is not None else None)
+                yield (position_final.tolist() ,actions.tolist()[0] if actions is not None else None, rewards[0].tolist(), logits.tolist() if logits is not None else None)
     
-    def export_transition_data(self):
+    def export_transition_data(self, resume_from: str|None = None):
+        if resume_from is not None:
+            start_episode = self._load_checkpoint(resume_from)
+            self.logger.info("checkpoint loaded successfully")
+
         transitions = []
         for posn, action, reward, log_probs in self.get_transition_data():
             transitions.append({
@@ -1160,5 +1164,5 @@ if __name__ == "__main__":
 
     # Example: Start training, save every 500 episodes
     # Optionally resume: resume_from="ppo_daedalus_checkpoints/checkpoint_episode_XXX.pt"
-    #trainer.export_transition_data()
-    trainer.train(checkpoint_interval=500, resume_from="ppo_daedalus_checkpoints/checkpoint_episode_2823.pt")
+    trainer.export_transition_data(resume_from="ppo_daedalus_checkpoints/checkpoint_episode_2823.pt")
+    #trainer.train(checkpoint_interval=500, resume_from="ppo_daedalus_checkpoints/checkpoint_episode_2823.pt")
